@@ -531,16 +531,66 @@ def _open(db_path: Path | str | None = None) -> duckdb.DuckDBPyConnection:
 # Read-only context managers — for analysis modules
 # ---------------------------------------------------------------------------
 
+_RESOLVED_DB_PATH: Path = Path(
+    os.environ.get(
+        "ANIMETOR_RESOLVED_DB_PATH",
+        str(Path(__file__).resolve().parent.parent.parent.parent / "result" / "resolved.duckdb"),
+    )
+)
+
+
+def _attach_resolved_views(conn: duckdb.DuckDBPyConnection) -> bool:
+    """resolved.duckdb を read-only ATTACH し、persons/anime/credits/anime_studios/studios
+    の TEMP VIEW を作成して bare table 名で参照可能にする。
+
+    Resolved 層が正の canonical 1-row-per-entity。analysis modules は `FROM credits`
+    のような schema 不指定 SQL を書くので、view 透過化で resolved を見せる。
+
+    Returns True if attached and views created, False on any failure (caller
+    should fall back to conformed 経由 / SQLite SILVER).
+    """
+    if not _RESOLVED_DB_PATH.exists():
+        return False
+    try:
+        conn.execute(f"ATTACH '{_RESOLVED_DB_PATH}' AS rd (READ_ONLY)")
+    except Exception:
+        return False  # 既に ATTACH 済 or 排他
+    # resolved.duckdb は main schema (default) を使う。tables: anime, credits, episodes, persons, studios
+    # anime_studios は resolved に未生成のため、conformed schema 経由 view する。
+    for tbl in ("persons", "anime", "credits", "studios", "episodes"):
+        try:
+            conn.execute(
+                f"CREATE OR REPLACE TEMP VIEW {tbl} AS "
+                f"SELECT * FROM rd.{tbl}"
+            )
+        except Exception as exc:
+            logger.debug("resolved_view_create_skip", table=tbl, error=str(exc))
+    # anime_studios — conformed schema 経由 (resolved に未生成)
+    try:
+        conn.execute(
+            "CREATE OR REPLACE TEMP VIEW anime_studios AS "
+            "SELECT * FROM conformed.anime_studios"
+        )
+    except Exception as exc:
+        logger.debug("anime_studios_view_create_skip", error=str(exc))
+    return True
+
+
 @contextmanager
 def gold_connect(
     path: Path | str | None = None,
     *,
     memory_limit: str = "16GB",
+    attach_resolved: bool = True,
 ) -> Iterator[duckdb.DuckDBPyConnection]:
     """Open gold.duckdb read-only for the duration of one query block.
 
     Per-query open/close so analysis modules never pin to a stale inode
     after the pipeline atomically swaps gold.duckdb.
+
+    attach_resolved=True: ATTACH result/resolved.duckdb (READ_ONLY) and
+    create TEMP VIEW persons/anime/credits/anime_studios/studios so analysis
+    modules can write schema-less `FROM credits` SQL.
     """
     p = str(path or DEFAULT_GOLD_DB_PATH)
     conn = duckdb.connect(p, read_only=True)
@@ -551,6 +601,8 @@ def gold_connect(
             conn.execute("SET schema='mart'")
         except Exception:
             pass
+        if attach_resolved:
+            _attach_resolved_views(conn)
         yield conn
     finally:
         conn.close()

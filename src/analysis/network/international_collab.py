@@ -743,13 +743,21 @@ def load_credits_for_international(
         List of (person_id, anime_id, role, year_or_None) tuples.
         Empty list if no data can be loaded (error logged).
     """
-    # Try Resolved schema: credits join anime on anime_id → year
+    # gold_connect が ATTACH+VIEW で credits/anime を透過化済 (main schema)。
+    # 失敗時 conformed.* に fallback。
     queries = [
-        # Resolved-layer: credits table with year from anime
         """
         SELECT c.person_id, c.anime_id, c.role, a.year
         FROM credits c
         LEFT JOIN anime a ON c.anime_id = a.id
+        WHERE c.person_id IS NOT NULL
+          AND c.anime_id IS NOT NULL
+          AND c.role IS NOT NULL
+        """,
+        """
+        SELECT c.person_id, c.anime_id, c.role, a.year
+        FROM conformed.credits c
+        LEFT JOIN conformed.anime a ON c.anime_id = a.id
         WHERE c.person_id IS NOT NULL
           AND c.anime_id IS NOT NULL
           AND c.role IS NOT NULL

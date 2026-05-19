@@ -360,16 +360,40 @@ def studio_foreign_share(
     if not foreign_ids:
         return []
 
-    try:
-        rows = conn.execute("""
+    # gold_connect が credits/anime_studios を VIEW で透過化済 (main schema)。
+    # 失敗時 conformed.* / legacy anime.studio_id (SQLite) に fallback。
+    queries = [
+        """
+            SELECT s.studio_id, c.person_id, COUNT(*) AS n_credits
+            FROM credits c
+            JOIN anime_studios s ON c.anime_id = s.anime_id
+            WHERE s.studio_id IS NOT NULL
+            GROUP BY s.studio_id, c.person_id
+        """,
+        """
+            SELECT s.studio_id, c.person_id, COUNT(*) AS n_credits
+            FROM conformed.credits c
+            JOIN conformed.anime_studios s ON c.anime_id = s.anime_id
+            WHERE s.studio_id IS NOT NULL
+            GROUP BY s.studio_id, c.person_id
+        """,
+        """
             SELECT a.studio_id, c.person_id, COUNT(*) AS n_credits
             FROM credits c
             JOIN anime a ON c.anime_id = a.id
             WHERE a.studio_id IS NOT NULL
             GROUP BY a.studio_id, c.person_id
-        """).fetchall()
-    except Exception as exc:
-        log.warning("studio_foreign_share_query_failed", error=str(exc))
+        """,
+    ]
+    rows: list[tuple] = []
+    for sql in queries:
+        try:
+            rows = conn.execute(sql).fetchall()
+            break
+        except Exception as exc:
+            log.debug("studio_foreign_share_attempt_failed", error=str(exc), sql=sql[:60])
+    if not rows:
+        log.warning("studio_foreign_share_query_failed")
         return []
 
     # Aggregate per studio

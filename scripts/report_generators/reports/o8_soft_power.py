@@ -153,12 +153,22 @@ def extract_anime_distribution_profiles(
     Returns:
         Tuple of (list of AnimeDistributionProfile, dict platform_key -> PlatformCount).
     """
-    try:
-        rows = conn.execute(
-            "SELECT id, title_romaji, external_links_json FROM conformed.anime"
-        ).fetchall()
-    except Exception as exc:
-        log.warning("anime_query_failed", error=str(exc))
+    # Schema 自動解決: resolved (canonical) → conformed (source-prefixed dup) → bare (SQLite test fixture).
+    # title_romaji 列は SQLite test fixture 用、conformed では title_en にマップされる。
+    queries = [
+        "SELECT id, title_en AS title_romaji, external_links_json FROM resolved.anime",
+        "SELECT id, title_en AS title_romaji, external_links_json FROM conformed.anime",
+        "SELECT id, title_romaji, external_links_json FROM anime",
+    ]
+    rows: list[tuple] = []
+    for sql in queries:
+        try:
+            rows = conn.execute(sql).fetchall()
+            break
+        except Exception as exc:
+            log.debug("anime_query_attempt_failed", sql=sql[:60], error=str(exc))
+    if not rows:
+        log.warning("anime_query_failed")
         return [], {}
 
     platform_anime: dict[str, set[str]] = defaultdict(set)
@@ -243,23 +253,38 @@ def fetch_person_network_rows(
     except Exception:
         pass  # scores table may not exist — use credit count proxy
 
-    # Fetch credits per person + which anime they worked on
-    try:
-        credit_rows = conn.execute(
-            "SELECT person_id, anime_id FROM conformed.credits"
-        ).fetchall()
-    except Exception as exc:
-        log.warning("credits_query_failed", error=str(exc))
+    # Schema 自動解決: resolved → conformed → bare.
+    credit_queries = [
+        "SELECT person_id, anime_id FROM resolved.credits",
+        "SELECT person_id, anime_id FROM conformed.credits",
+        "SELECT person_id, anime_id FROM credits",
+    ]
+    credit_rows: list[tuple] = []
+    for sql in credit_queries:
+        try:
+            credit_rows = conn.execute(sql).fetchall()
+            break
+        except Exception as exc:
+            log.debug("credits_query_attempt_failed", sql=sql[:60], error=str(exc))
+    if not credit_rows:
+        log.warning("credits_query_failed")
         return []
 
-    # Fetch person names
+    # Fetch person names — schema fallback.
     name_map: dict[str, str] = {}
-    try:
-        person_rows = conn.execute("SELECT id, name_romaji FROM conformed.persons").fetchall()
-        for r in person_rows:
-            name_map[str(r[0])] = str(r[1] or "")
-    except Exception:
-        pass
+    name_queries = [
+        "SELECT id, name_en AS name_romaji FROM resolved.persons",
+        "SELECT id, name_en AS name_romaji FROM conformed.persons",
+        "SELECT id, name_romaji FROM persons",
+    ]
+    for sql in name_queries:
+        try:
+            person_rows = conn.execute(sql).fetchall()
+            for r in person_rows:
+                name_map[str(r[0])] = str(r[1] or "")
+            break
+        except Exception:
+            continue
 
     # Aggregate
     person_credits: dict[str, int] = defaultdict(int)
@@ -928,7 +953,7 @@ SPEC = make_default_spec(
     ci_estimator='bootstrap', n_resamples=1000,
     extra_limitations=[
         'AniList external_links_json の捕捉率に依存、新規プラットフォームは遅延',
-        'theta_proxy は anime.score 不使用の構造的代理 — 真の theta_i との差あり',
+        'theta_proxy は viewer-rating 不使用の構造的代理 — 真の theta_i との差あり',
         'platform_weight 全 1.0 固定 (Tier1)、Tier2 で重み付け予定',
     ],
 )
