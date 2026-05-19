@@ -123,6 +123,141 @@ _JAPANESE_RE = _build_hometown_re(_JAPANESE_HOMETOWN_TOKENS)
 _CHINESE_RE = _build_hometown_re(_CHINESE_HOMETOWN_TOKENS)
 _KOREAN_RE = _build_hometown_re(_KOREAN_HOMETOWN_TOKENS)
 
+# 多国 hometown tokens (英文 place_of_birth → ISO 3166-1 alpha-2)。
+# tmdb/ann/mal/bgm 経路の hometown は基本英語表記。JP/CN/KR は上の既存 token を優先。
+# Conservative: 曖昧語 (e.g. "los angeles" は明示、"angeles" 単独は避ける) のみ採用、
+# word boundary で false positive 抑制。
+_COUNTRY_HOMETOWN_TOKENS: dict[str, frozenset[str]] = {
+    "US": frozenset(
+        {
+            "usa", "united states", "u.s.a.", "u.s.", "america",
+            "new york", "los angeles", "chicago", "houston", "philadelphia",
+            "phoenix", "san diego", "dallas", "san jose", "boston", "seattle",
+            "san francisco", "miami", "atlanta", "washington", "denver",
+            "portland", "honolulu", "california", "texas", "florida",
+            "illinois", "pennsylvania", "ohio", "michigan", "georgia",
+            "new jersey", "virginia", "north carolina", "massachusetts",
+            "minnesota", "colorado", "arizona", "indiana", "tennessee",
+            "missouri", "maryland", "wisconsin", "oregon", "hawaii",
+        }
+    ),
+    "GB": frozenset(
+        {
+            "united kingdom", "uk", "england", "scotland", "wales",
+            "northern ireland", "london", "manchester", "birmingham",
+            "liverpool", "leeds", "glasgow", "edinburgh", "cardiff",
+        }
+    ),
+    "FR": frozenset(
+        {
+            "france", "paris", "marseille", "lyon", "toulouse", "nice",
+            "nantes", "strasbourg", "bordeaux", "lille",
+        }
+    ),
+    "DE": frozenset(
+        {
+            "germany", "deutschland", "berlin", "munich", "münchen",
+            "hamburg", "cologne", "köln", "frankfurt", "stuttgart",
+            "düsseldorf", "duesseldorf", "leipzig", "dresden",
+        }
+    ),
+    "CA": frozenset(
+        {
+            "canada", "toronto", "montreal", "vancouver", "ottawa",
+            "calgary", "edmonton", "ontario", "quebec", "alberta",
+            "british columbia",
+        }
+    ),
+    "AU": frozenset(
+        {
+            "australia", "sydney", "melbourne", "brisbane", "perth",
+            "adelaide", "canberra",
+        }
+    ),
+    "IT": frozenset(
+        {
+            "italy", "italia", "rome", "milan", "naples", "turin",
+            "florence", "venice", "bologna",
+        }
+    ),
+    "ES": frozenset(
+        {
+            "spain", "españa", "madrid", "barcelona", "valencia",
+            "seville", "sevilla", "zaragoza",
+        }
+    ),
+    "BR": frozenset(
+        {
+            "brazil", "brasil", "são paulo", "sao paulo", "rio de janeiro",
+            "brasília", "brasilia", "salvador", "fortaleza",
+        }
+    ),
+    "RU": frozenset(
+        {
+            "russia", "russian federation", "moscow", "st petersburg",
+            "saint petersburg", "rsfsr", "ussr", "soviet union",
+            "novosibirsk", "yekaterinburg",
+        }
+    ),
+    "MX": frozenset(
+        {
+            "mexico", "méxico", "mexico city", "guadalajara", "monterrey",
+            "puebla",
+        }
+    ),
+    "AR": frozenset({"argentina", "buenos aires", "córdoba", "cordoba", "rosario"}),
+    "PH": frozenset({"philippines", "manila", "quezon", "cebu", "davao"}),
+    "TH": frozenset({"thailand", "bangkok", "phuket", "chiang mai"}),
+    "VN": frozenset(
+        {"vietnam", "viet nam", "hanoi", "ho chi minh", "saigon", "da nang"}
+    ),
+    "ID": frozenset({"indonesia", "jakarta", "surabaya", "bandung", "medan"}),
+    "MY": frozenset({"malaysia", "kuala lumpur", "penang", "johor bahru"}),
+    "SG": frozenset({"singapore"}),
+    "IN": frozenset(
+        {
+            "india", "mumbai", "delhi", "new delhi", "bangalore",
+            "bengaluru", "chennai", "kolkata", "hyderabad",
+        }
+    ),
+    "NL": frozenset({"netherlands", "holland", "amsterdam", "rotterdam", "the hague"}),
+    "SE": frozenset({"sweden", "stockholm", "gothenburg", "malmö", "malmo"}),
+    "NO": frozenset({"norway", "oslo", "bergen"}),
+    "FI": frozenset({"finland", "helsinki", "espoo", "tampere"}),
+    "DK": frozenset({"denmark", "copenhagen", "aarhus"}),
+    "PL": frozenset({"poland", "warsaw", "kraków", "krakow", "łódź", "lodz"}),
+    "TR": frozenset({"turkey", "türkiye", "istanbul", "ankara", "izmir"}),
+    "EG": frozenset({"egypt", "cairo", "alexandria"}),
+    "ZA": frozenset(
+        {"south africa", "johannesburg", "cape town", "durban", "pretoria"}
+    ),
+    "NZ": frozenset({"new zealand", "auckland", "wellington", "christchurch"}),
+    "BE": frozenset({"belgium", "brussels", "antwerp", "ghent"}),
+    "CH": frozenset({"switzerland", "zurich", "zürich", "geneva", "bern", "basel"}),
+    "AT": frozenset({"austria", "vienna", "wien", "salzburg", "graz"}),
+    "GR": frozenset({"greece", "athens", "thessaloniki"}),
+    "IE": frozenset({"ireland", "dublin", "cork"}),
+    "PT": frozenset({"portugal", "lisbon", "lisboa", "porto"}),
+    "UA": frozenset({"ukraine", "kyiv", "kiev", "kharkiv", "odesa", "odessa"}),
+    "IL": frozenset({"israel", "tel aviv", "jerusalem", "haifa"}),
+    "CZ": frozenset({"czech republic", "czechia", "prague", "praha", "brno"}),
+    "HU": frozenset({"hungary", "budapest"}),
+    "RO": frozenset({"romania", "bucharest", "bucurești"}),
+}
+
+
+def _build_country_re(tokens: frozenset[str]) -> re.Pattern[str]:
+    """Compile tokens into a word-boundary regex (longest-first to avoid prefix shadowing)."""
+    if not tokens:
+        return re.compile(r"(?!)")
+    alts = sorted(map(re.escape, tokens), key=len, reverse=True)
+    return re.compile(r"(?<![A-Za-z])(?:" + "|".join(alts) + r")(?![A-Za-z])", re.IGNORECASE)
+
+
+_COUNTRY_RES: dict[str, re.Pattern[str]] = {
+    code: _build_country_re(toks) for code, toks in _COUNTRY_HOMETOWN_TOKENS.items()
+}
+
 # Arabic: sorted longest-first so "hong kong" matches before "hong"
 _arabic_keys_sorted = sorted(_ARABIC_HOMETOWN_TOKENS.keys(), key=len, reverse=True)
 _ARABIC_RE = (
@@ -253,6 +388,39 @@ def _resolve_arabic(hometown_lower: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def infer_country_from_hometown(hometown: str | None) -> str | None:
+    """Hometown 単独から ISO 3166-1 alpha-2 国コード推定。
+
+    `infer_nationalities()` は name_native script 必須だが、TMDb / ANN / MAL / bgm
+    の place_of_birth は英語表記 (e.g. "Tokyo, Japan") なので script 推定不能。
+    本関数は token match のみ。Conservative: 不明時 None。
+
+    優先順:
+        1. JP / KR token (既存強力 token、word-boundary 不要なほど特異)
+        2. CN token (HK / TW 含む)
+        3. Arabic token
+        4. _COUNTRY_HOMETOWN_TOKENS (英文 多国)
+
+    Returns ISO 2-letter or None.
+    """
+    if not hometown:
+        return None
+    low = hometown.lower()
+    if _JAPANESE_RE.search(low):
+        return "JP"
+    if _KOREAN_RE.search(low):
+        return "KR"
+    if _CHINESE_RE.search(low):
+        return "CN"
+    m = _ARABIC_RE.search(low)
+    if m:
+        return _ARABIC_HOMETOWN_TOKENS.get(m.group().lower())
+    for code, rx in _COUNTRY_RES.items():
+        if rx.search(hometown):
+            return code
+    return None
 
 
 def lang_of_alias(alias: str) -> str | None:

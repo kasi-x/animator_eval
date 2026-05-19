@@ -796,6 +796,44 @@ def integrate(
             logger.info("credit_year_backfilled", populated=r[0])
         except Exception as exc:
             logger.warning("credit_year_backfill_skip", error=str(exc))
+
+        # nationality backfill: persons.hometown → ISO 国コード推定
+        # tmdb / ann / mal / bgm 経路の hometown は英語表記、name_native script 推定不能。
+        # `infer_country_from_hometown()` で token match による推定値を nationality 列へ。
+        # Conservative: 推定不能時 NULL のまま。
+        try:
+            from src.utils.name_utils import infer_country_from_hometown
+
+            def _safe_infer_country(h: str | None) -> str:
+                # DuckDB UDF: None 返却不可。空文字で fallback。
+                if h is None:
+                    return ""
+                r = infer_country_from_hometown(h)
+                return r if r else ""
+
+            try:
+                conn.create_function(
+                    "_infer_country_ht",
+                    _safe_infer_country,
+                    ["VARCHAR"],
+                    "VARCHAR",
+                )
+            except Exception:
+                pass  # 再登録された場合
+            conn.execute(
+                "UPDATE persons SET nationality = _infer_country_ht(hometown) "
+                "WHERE (nationality IS NULL OR nationality = '') "
+                "AND hometown IS NOT NULL AND hometown != '' "
+                "AND _infer_country_ht(hometown) != ''"
+            )
+            r = conn.execute(
+                "SELECT COUNT(*) FROM persons "
+                "WHERE nationality IS NOT NULL AND nationality != ''"
+            ).fetchone()
+            counts["nationality_populated"] = r[0]
+            logger.info("nationality_backfilled", populated=r[0])
+        except Exception as exc:
+            logger.warning("nationality_backfill_skip", error=str(exc))
     finally:
         conn.close()
 

@@ -8,11 +8,66 @@ from src.utils.name_utils import (
     assign_native_name_fields,
     assign_native_title_fields,
     detect_name_script,
+    infer_country_from_hometown,
     infer_nationalities,
     _HOMETOWN_CACHE,
     _TOKENS_JSON_PATH,
     _load_tokens_json,
 )
+
+
+class TestInferCountryFromHometown:
+    def test_japan(self):
+        assert infer_country_from_hometown("Tokyo, Japan") == "JP"
+
+    def test_korea(self):
+        assert infer_country_from_hometown("Seoul, South Korea") == "KR"
+
+    def test_china(self):
+        assert infer_country_from_hometown("Beijing, China") == "CN"
+
+    def test_hong_kong(self):
+        assert infer_country_from_hometown("Hong Kong") == "CN"
+
+    def test_usa_usa(self):
+        assert infer_country_from_hometown("Los Angeles, California, USA") == "US"
+
+    def test_usa_state(self):
+        assert infer_country_from_hometown("New York City, New York, USA") == "US"
+
+    def test_uk(self):
+        assert infer_country_from_hometown("London, England, UK") == "GB"
+
+    def test_france(self):
+        assert infer_country_from_hometown("Paris, France") == "FR"
+
+    def test_germany(self):
+        assert infer_country_from_hometown("Berlin, Germany") == "DE"
+
+    def test_canada(self):
+        assert infer_country_from_hometown("Toronto, Ontario, Canada") == "CA"
+
+    def test_russia(self):
+        assert infer_country_from_hometown("Moscow, RSFSR, USSR") == "RU"
+
+    def test_unknown(self):
+        assert infer_country_from_hometown("Narnia") is None
+
+    def test_none(self):
+        assert infer_country_from_hometown(None) is None
+
+    def test_empty(self):
+        assert infer_country_from_hometown("") is None
+
+    def test_word_boundary_no_false_positive(self):
+        # "Stamford" should not match "USA" substring
+        # (no "stamford" token, so result depends only on city)
+        # Expect None unless "stamford" is in any country token set.
+        assert infer_country_from_hometown("Stamford") is None
+
+    def test_jp_priority_over_country_tokens(self):
+        # "Hokkaido, Japan" — JP token "japan"
+        assert infer_country_from_hometown("Hokkaido, Japan") == "JP"
 
 
 class TestDetectNameScript:

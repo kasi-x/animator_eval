@@ -133,14 +133,18 @@ def resolve_nationality(
     )
 
 
-def _persons_columns(conn: Any) -> set[str]:
-    """Detect available columns on the `persons` table for SQLite or DuckDB.
+def _persons_columns(conn: Any, table_ref: str = "persons") -> set[str]:
+    """Detect available columns on the persons table for SQLite or DuckDB.
 
     SQLite: `PRAGMA table_info(persons)`. DuckDB lacks PRAGMA but supports
     `information_schema.columns`; fall back to it on PRAGMA failure.
+
+    table_ref accepts a qualified name (e.g. "resolved.persons"); column
+    discovery uses the un-qualified suffix.
     """
+    bare = table_ref.split(".")[-1]
     try:
-        col_info = conn.execute("PRAGMA table_info(persons)").fetchall()
+        col_info = conn.execute(f"PRAGMA table_info({table_ref})").fetchall()
         if col_info:
             return {r[1] for r in col_info}
     except Exception:
@@ -148,11 +152,42 @@ def _persons_columns(conn: Any) -> set[str]:
     try:
         rows = conn.execute(
             "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = 'persons'"
+            "WHERE table_name = ?",
+            [bare],
         ).fetchall()
         return {r[0] for r in rows}
     except Exception:
         return set()
+
+
+def _resolve_persons_table(conn: Any) -> str:
+    """DuckDB conn が指す DB に応じて persons table の qualified name を返す。
+
+    優先順:
+        1. `resolved.persons` (Resolved layer — canonical 1-row-per-person)
+        2. `conformed.persons` (Conformed layer — source-prefixed dup rows)
+        3. `persons` (bare; SQLite SILVER or auto-default schema)
+
+    ATTACH 経路: gold/mart conn から resolved を読みたい場合は本関数の前に
+    呼出側で `ATTACH 'result/resolved.duckdb' AS rd (READ_ONLY)` 推奨。
+    """
+    # DuckDB: information_schema で存在確認
+    try:
+        rows = conn.execute(
+            "SELECT table_schema, table_name FROM information_schema.tables "
+            "WHERE table_name = 'persons'"
+        ).fetchall()
+        schemas = {r[0] for r in rows}
+        # resolved.persons を優先 (canonical layer)
+        if "resolved" in schemas:
+            return "resolved.persons"
+        if "conformed" in schemas:
+            return "conformed.persons"
+        if schemas:
+            return "persons"  # default schema にあれば bare 名で参照可
+    except Exception:
+        pass
+    return "persons"
 
 
 def load_nationality_records(
@@ -171,7 +206,8 @@ def load_nationality_records(
     Returns:
         List of NationalityRecord, one per person.
     """
-    cols = _persons_columns(conn)
+    table_ref = _resolve_persons_table(conn)
+    cols = _persons_columns(conn, table_ref)
 
     has_nationality = "nationality" in cols
     has_country = "country_of_origin" in cols
@@ -197,12 +233,12 @@ def load_nationality_records(
     else:
         select_parts.append("NULL AS name_ko")
 
-    sql = f"SELECT {', '.join(select_parts)} FROM persons"
+    sql = f"SELECT {', '.join(select_parts)} FROM {table_ref}"
 
     try:
         rows = conn.execute(sql).fetchall()
     except Exception as exc:
-        log.warning("nationality_resolver_query_failed", error=str(exc))
+        log.warning("nationality_resolver_query_failed", error=str(exc), table=table_ref)
         return []
 
     records: list[NationalityRecord] = []
