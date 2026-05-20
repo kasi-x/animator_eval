@@ -274,6 +274,45 @@ tasks:
       - task ci-check-lineage
       - task ci-check-method-notes
 
+  # ==========================================================================
+  # Session 2 quality audit gates (2026-05-20)
+  # ==========================================================================
+  ci-check-spec-coverage:
+    desc: 'Audit: 全 v2 report が module-level SPEC を宣言しているか'
+    cmds:
+      - pixi run python scripts/report_generators/ci_check_spec_coverage.py {{.CLI_ARGS}}
+
+  ci-check-method-gate:
+    desc: 'Audit: SPEC.method_gate (CI + null + holdout/sensitivity) 完備性'
+    cmds:
+      - pixi run python scripts/report_generators/ci_check_method_gate.py {{.CLI_ARGS}}
+
+  lint-findings-separation:
+    desc: 'Findings (評価語ゼロ) / Interpretation (一人称明示) 分離 lint'
+    cmds:
+      - pixi run python scripts/report_generators/lint_findings_separation.py {{.CLI_ARGS}}
+
+  quality-scorecard:
+    desc: 'Report quality scorecard 0-100 採点 (default 出力先 result/reports/_quality_scorecard.{json,md})'
+    cmds:
+      - pixi run python scripts/report_generators/quality_scorecard.py {{.CLI_ARGS}}
+
+  lineage-register:
+    desc: 'meta_lineage に SPEC.data_lineage を auto-upsert + JSON 出力'
+    cmds:
+      - pixi run python scripts/report_generators/lineage_register.py {{.CLI_ARGS | default "--no-db"}}
+
+  quality-gates:
+    desc: 'Session 2 quality gate: vocab + findings-interp + spec-coverage + method-gate + scorecard'
+    cmds:
+      # ソースコードのみ (result/reports/ は生成済 HTML、過去 vocab を含むので除外)
+      - pixi run python scripts/report_generators/lint_vocab.py scripts/report_generators/reports/
+      - task lint-findings-separation
+      - task ci-check-spec-coverage
+      - task ci-check-method-gate
+      - task quality-scorecard
+      - task lineage-register
+
   data-dictionary:
     desc: 'Regenerate docs/DATA_DICTIONARY.md (CHECK=1 to verify up-to-date)'
     cmds:

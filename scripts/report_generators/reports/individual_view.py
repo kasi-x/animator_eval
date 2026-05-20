@@ -607,7 +607,7 @@ class IndividualViewReport(BaseReportGenerator):
 # ---------------------------------------------------------------------------
 # v3 minimal SPEC
 # ---------------------------------------------------------------------------
-from .._spec import make_default_spec  # noqa: E402
+from .._spec import SensitivityAxis, make_default_spec  # noqa: E402
 
 SPEC = make_default_spec(
     name="individual_view",
@@ -619,19 +619,29 @@ SPEC = make_default_spec(
     ),
     identifying_assumption=(
         "クレジットデータは公開情報のみ。スコアはネットワーク位置・協業密度の指標であり、芸術性・主観的評価は測定しない。"
-        "コホート比較はグローバルランクではなく同期・同役職内の相対位置。"
+        "コホート比較はグローバルランクではなく同期・同役職内の相対位置で、cohort 内 percentile で表記する。"
         "CI は analytical (SE = σ/√n)、ヒューリスティックではない。"
+        "個人レベル推定は CI 必須、グループ主張は別 brief で扱う。opt-out 7 日 SLA で削除。"
     ),
     null_model=["cohort mean baseline"],
     sources=["credits", "persons", "person_scores", "feat_individual_contribution"],
-    meta_table=None,
+    meta_table="meta_individual_view",
     estimator="OLS residual (opportunity_residual) + equal-lambda IV decomposition",
     ci_estimator="analytical",
     n_resamples=0,
+    sensitivity_grid=[
+        SensitivityAxis(name='cohort_bin_width', values=['3y', '5y', '10y']),
+        SensitivityAxis(name='lambda_weights', values=['equal_0.2', 'data_driven']),
+        SensitivityAxis(name='ci_alpha', values=[0.05, 0.10]),
+    ],
     extra_limitations=[
         "クレジットカバレッジはデータソース依存",
         "λ 重みは事前固定 — 別の重みで別のスコアが得られる",
         "個人の主観的評価・芸術性を測定しない",
         "opt-out 後は 7 日 SLA で display 層から削除",
     ],
+    alternative_interpretations=(
+        "個人 percentile はクレジット記録の sample selection を反映 (data source 偏向: ANN は監督偏重、AniList は新作偏重) する可能性。複数 source 統合度で位置が変動。",
+        "equal-λ IV 分解は理論的根拠ではなく operational 選択。data-driven λ 推定で 5 成分の貢献比が変わる可能性。",
+    ),
 )

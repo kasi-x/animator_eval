@@ -300,7 +300,7 @@ SPEC = make_default_spec(
         "review priority のみ、誤マッチ確定ではない",
     ],
     alternative_interpretations=(
-        "Poisson outlier は単に productive person (director / 大物 KA) を flag しているだけで、真の異常ではない可能性。手動 review で確認要。",
+        "Poisson outlier は単に productive person (director / 高クレジット KA) を flag しているだけで、真の異常ではない可能性。手動 review で確認要。",
         "Role KL divergence は cohort 切り口次第で値が大きく変動。年代別 cohort に細分化すると flag 数が変わる可能性。",
         "Source disagreement は entity resolution の問題ではなく、source 別に scrape されたクレジットの実態的相違 (e.g. ANN は IP 関連クレジット、AniList は staff クレジット偏重) を反映している可能性。",
     ),
