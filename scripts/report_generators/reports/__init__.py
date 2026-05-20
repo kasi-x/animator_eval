@@ -85,6 +85,8 @@ from .structure_committee import StructureCommitteeReport
 from .causal_studio_transfer import CausalStudioTransferReport
 # Card 34-04: B2C individual person view (labor-first)
 from .individual_view import IndividualViewReport
+# Card 25-04: gender Oaxaca-Blinder decomposition
+from .equity_oaxaca import EquityOaxacaReport
 
 #: All v2 report classes, in generation order
 #:
@@ -148,6 +150,7 @@ V2_REPORT_CLASSES = [
     BridgeAnalysisReport,
     CausalStudioTransferReport,
     IndividualViewReport,
+    EquityOaxacaReport,
 ]
 
 __all__ = [
@@ -201,5 +204,6 @@ __all__ = [
     "StructureCommitteeReport",
     "CausalStudioTransferReport",
     "IndividualViewReport",
+    "EquityOaxacaReport",
     "V2_REPORT_CLASSES",
 ]
