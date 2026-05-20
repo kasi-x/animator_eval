@@ -65,8 +65,9 @@
 | exit_analysis.py | ExitAnalysisReport | 退職・復職分析 | merge | policy_attrition | KM/Cox を付録へ |
 | industry_analysis.py | IndustryAnalysisReport | 業界分析ダッシュボード | merge | industry_overview | common 版と重複大 |
 | career_transitions.py | CareerTransitionsReport | キャリア遷移分析 | merge | policy_generational_health | 段階遷移の章に吸収 |
+| equity_oaxaca.py | EquityOaxacaReport | 機会格差の Oaxaca-Blinder 分解 | **new** | — | TASK_CARDS/25_compensation_fairness/04; endowment vs structural、bootstrap CI 1000、gender §15 70% 充足後本格動作 |
 
-> 統合後 policy = **5 本**。
+> 統合後 policy = **6 本** (25/04 equity_oaxaca 追加)。
 
 ---
 

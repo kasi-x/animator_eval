@@ -282,7 +282,7 @@ class StructureCommitteeReport(BaseReportGenerator):
             "<p>出資者間 co-investment ネットワーク上の eigenvector centrality を "
             "期間別 (2017 境界) に算出し、上位 20 社を並べて比較する。 "
             "中心性は同 graph 内での隣接ノード重要度の伝播強度を表し、"
-            "企業の単独 ranking ではない。</p>"
+            "企業の単独優先度評価ではない。</p>"
             f"<ul>{''.join(findings_parts)}</ul>"
             + coverage_note
         )
@@ -473,7 +473,7 @@ _GLOSSARY: dict[str, str] = {
     "eigenvector_centrality": (
         "隣接ノードの重要度を再帰的に反映するノード重要度指標。"
         "「中心の隣接ほど中心」という関係式の固有値解。"
-        "個別企業の市場支配性 ranking ではない。"
+        "個別企業の市場支配性優先度評価ではない。"
     ),
     "HHI_Herfindahl_Hirschman_Index": (
         "市場集中度の業界標準指標。Σ(share_i)² × 10000。"

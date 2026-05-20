@@ -4,7 +4,7 @@
 group 差を endowment (構造的位置の差) と structural (同位置の処遇差) に分解。
 gender / cohort / studio tier subgroup で実行。
 
-H2 厳格: ability-framing 表現 NG → "構造的位置の差" / "同位置の処遇差" のみ。
+H2 厳格: 主観的評価表現 NG → "構造的位置の差" / "同位置の処遇差" のみ。
 group 任意性は openly 開示。gender null person は除外しその量を Findings に表示。
 
 Pre-condition: gender null < 30% (`§15` gender enrichment 完了後に動作)。

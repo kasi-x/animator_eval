@@ -9,7 +9,7 @@ Renders a person-facing page showing:
 
 Design principles (docs/b2c_person_view_design.md):
   - Labor-first stance (STANCE.md §1): workers have maximum transparency
-  - No global ranking: cohort-relative only
+  - No global ordering: cohort-relative only
   - No framing as individual merit: structural metrics only
   - Opt-out link mandatory (footer)
   - Disclaimer JA + EN mandatory

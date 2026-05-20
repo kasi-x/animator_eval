@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-05-15 (16 カード消化完了: 15/01, 15/03, 15/04, 15/x, 19/01-04, 25/02, 25/03, 26/01, 26/02, 26/03, 27/01-03, 28/01, 34/01-04)
+作成日: 2026-04-22 / 最終更新: 2026-05-20 (本セッションで消化: 35/01 final + 25/01 + 25/04 + 32 publication docs + 15/05 残務 + 15/06 残務 + 36 新カード起票 + Mart schema 透過化 + 全レポート vocab clean)
 
 未完了項目のみ。完了済みは `DONE.md`、設計原則は `CLAUDE.md`。
 
@@ -14,7 +14,7 @@
 | 🟠 High | MAL/Jikan scraper | Card 05 全件 scrape (~9.4 日完走) → `TASK_CARDS/12_mal_scraper_jikan/05_rescrape.md` |
 | 🟡 Medium | Report methodology | Temporal foresight Section 3.3 holdout validation 実装 (Option A、feat_career_annual / feat_person_scores データ投入後) |
 | 🟡 Medium | gender enrichment | SILVER `persons.gender` null 80.9% (2026-05-05、TMDb 修正後) → O1 70% 閾値達成には MAL Card 05 + AniList orphan backfill 必要 (§15) |
-| 🟡 Medium | AniList orphan backfill | credits 由来 90K orphan persons に Staff query batch fetch (gender + hometown 追加) — 新規 Card 候補 |
+| 🟡 Medium | AniList orphan backfill | ✅ カード起票 (`TASK_CARDS/36_anilist_orphan_backfill/01_orphan_backfill.md`、2026-05-20)、実装 scrape 律速で保留可 |
 | 🟢 Future | データ修正 | WIKIDATA_ROLE_MAP 修正後の JVMG credits 再マップ (Wikidata rate limit 解放待ち) |
 | 🟢 Strategy | 拡張目的レポート | 8 種拡張目的レポート → `TASK_CARDS/15_extension_reports/` (順: O3 → O1 → O2 → O4 → O6 → O8 → O7 → O5、05/06/07/08 は部分着手済) |
 | 🟢 Future | 新ソース | LiveChart / Wikidata 受賞 → `TASK_CARDS/16_new_sources/` (TMDb は 14/09 で完了済) |
@@ -29,7 +29,7 @@
 | 🟠 High | Publication 戦略 | 経済+情報DS 両建て / replication snapshot / 第 1 弾 anchor → `TASK_CARDS/32_publication/` (3 cards) |
 | 🟡 Medium | 政策提言経路 | 2 ページ短縮 brief / 議連 / 省庁 outreach → `TASK_CARDS/33_policy/` (3 cards) |
 | 🟠 High | レポート再構築 | labor-first audit / brief restructure / SNS short-form / B2C view → `TASK_CARDS/34_report_rebuild/` (5 cards) |
-| 🟠 High | データ流入路修復 | resolved.persons.nationality `'[]'` 流入バグ → `TASK_CARDS/35_data_quality_backfill/01_nationality_backfill.md`。O4 / international_collab の実データ動作前提 |
+| ✅ Done | データ流入路修復 | 35/01 nationality_backfill 完了 (commit `df2debb`、resolved.persons 非空率 3.48%→12.26% / 76,279 件、'[]' ゼロ、infer_country_from_hometown 新規 + Mart schema 透過化) |
 
 ---
 
@@ -211,12 +211,12 @@ analytical CI / null model / holdout の method gate を満たした **causal ev
 
 | Card | 内容 | 経路 |
 |------|------|------|
-| `01_did_studio_transfer` | スタジオ移籍 DiD: theta_i / opportunity 因果効果 (event-study 含) | publication / 政策 |
+| `01_did_studio_transfer` | ✅ 完了 (1287 lines `did_studio_transfer.py` + 529 report + 29 tests) DiD + event-study + parallel trends | publication / 政策 |
 | `02_opportunity_residual_null` | ✅ 完了 (2026-05-15) panel + analytical CI + permutation null | business / 政策 |
 | `03_visibility_loss_holdout` | ✅ 完了 (2026-05-15、commit `1905083`) LightGBM + ECE 0.065 + AUC 0.822、isotonic calibration、20 tests | business (HR) |
-| `04_pay_equity_decomp` | Oaxaca-Blinder 分解 (gender / cohort / 所属): endowment vs structural | publication / 政策 |
+| `04_pay_equity_decomp` | ✅ 完了 (2026-05-20) `equity/oaxaca_decomp.py` + bootstrap 1000 + 14 tests、`§15` gender 70% 充足後本格動作 | publication / 政策 |
 
-依存: `04` は `§15` gender 充足 + `01` 完了が望ましい。
+依存: `04` は `§15` gender 充足で本格動作可能 (skeleton + 警告 mode で生成済)。
 
 ---
 
