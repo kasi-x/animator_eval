@@ -1,6 +1,7 @@
 """Tests for Phase 9: analysis_modules parallel execution."""
 
 import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,13 +11,17 @@ from src.pipeline_phases.analysis_modules import (
     _execute_analysis_task,
     _run_task_batch,
 )
-from src.pipeline_phases.context import PipelineContext
 
 
 @pytest.fixture
 def ctx():
-    """Minimal PipelineContext with no real data — sufficient for mock task tests."""
-    return PipelineContext(visualize=False, dry_run=True)
+    """Minimal context for mock task tests.
+
+    H-4 移行で PipelineContext は typed dataclass per phase に分解された。
+    本ファイルのテストは AnalysisTask / batch runner の構造を検証するだけで、
+    実 phase 関数は呼ばないので container 役の SimpleNamespace で足りる。
+    """
+    return SimpleNamespace(visualize=False, dry_run=True, analysis_results={})
 
 
 class TestAnalysisTask:
