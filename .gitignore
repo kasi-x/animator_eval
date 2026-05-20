@@ -48,6 +48,9 @@ htmlcov/
 .testmondata-journal
 bench_rust.py
 
+# DuckDB temp storage (regenerable, can grow to 100+ GB)
+.tmp/
+
 # Logs
 *.log
 logs/
