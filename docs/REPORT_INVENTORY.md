@@ -66,8 +66,9 @@
 | industry_analysis.py | IndustryAnalysisReport | 業界分析ダッシュボード | merge | industry_overview | common 版と重複大 |
 | career_transitions.py | CareerTransitionsReport | キャリア遷移分析 | merge | policy_generational_health | 段階遷移の章に吸収 |
 | equity_oaxaca.py | EquityOaxacaReport | 機会格差の Oaxaca-Blinder 分解 | **new** | — | TASK_CARDS/25_compensation_fairness/04; endowment vs structural、bootstrap CI 1000、gender §15 70% 充足後本格動作 |
+| network_resilience.py | NetworkResilienceReport | Network 構造的脆弱性 | **new** | — | 高度化: hub/bridge 順次除去 simulation、LCC/PCC 劣化曲線、fragility_ratio、top-10 critical persons |
 
-> 統合後 policy = **6 本** (25/04 equity_oaxaca 追加)。
+> 統合後 policy = **7 本** (25/04 equity_oaxaca + 高度化 network_resilience 追加)。
 
 ---
 
@@ -89,8 +90,9 @@
 | career_dynamics.py | CareerDynamicsReport | キャリアダイナミクス | merge | growth_scores | 統合 |
 | studio_pipeline.py | StudioPipelineReport | スタジオ育成パイプライン構造 | **new** | — | TASK_CARDS/26_industry_structure/03; 若手θ成長・中堅継続率・集中度・bus factor |
 | career_visibility_warning.py | CareerVisibilityWarningReport | 翌年クレジット可視性喪失 早期警告 | **new** | — | TASK_CARDS/25_compensation_fairness/03; LightGBM+isotonic, temporal holdout AUC gate, subgroup fairness |
+| cohort_inequality.py | CohortInequalityReport | 世代別 構造的不平等の推移 | **new** | — | 高度化: 5 年 cohort 別 Gini/Theil-T/Atkinson 時系列、bootstrap CI、生存者バイアス caveat |
 
-> 統合後 hr = **8 本**（25/03 career_visibility_warning 追加）。
+> 統合後 hr = **9 本** (cohort_inequality 追加)。
 
 ---
 

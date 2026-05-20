@@ -87,6 +87,9 @@ from .causal_studio_transfer import CausalStudioTransferReport
 from .individual_view import IndividualViewReport
 # Card 25-04: gender Oaxaca-Blinder decomposition
 from .equity_oaxaca import EquityOaxacaReport
+# Session 2026-05-20: 高度化レポート群
+from .network_resilience import NetworkResilienceReport
+from .cohort_inequality import CohortInequalityReport
 
 #: All v2 report classes, in generation order
 #:
@@ -151,6 +154,8 @@ V2_REPORT_CLASSES = [
     CausalStudioTransferReport,
     IndividualViewReport,
     EquityOaxacaReport,
+    NetworkResilienceReport,
+    CohortInequalityReport,
 ]
 
 __all__ = [
@@ -205,5 +210,7 @@ __all__ = [
     "CausalStudioTransferReport",
     "IndividualViewReport",
     "EquityOaxacaReport",
+    "NetworkResilienceReport",
+    "CohortInequalityReport",
     "V2_REPORT_CLASSES",
 ]
