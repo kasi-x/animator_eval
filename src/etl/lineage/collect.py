@@ -28,11 +28,12 @@ log = structlog.get_logger(__name__)
 # Paths
 # ---------------------------------------------------------------------------
 
+_PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]
 DEFAULT_SILVER_PATH: Path = Path(
-    os.environ.get("ANIMETOR_SILVER_PATH", "result/silver.duckdb")
+    os.environ.get("ANIMETOR_SILVER_PATH") or (_PROJECT_ROOT / "result" / "silver.duckdb")
 )
 DEFAULT_BRONZE_ROOT: Path = Path(
-    os.environ.get("ANIMETOR_BRONZE_ROOT", "result/bronze")
+    os.environ.get("ANIMETOR_BRONZE_ROOT") or (_PROJECT_ROOT / "result" / "bronze")
 )
 
 # ---------------------------------------------------------------------------
