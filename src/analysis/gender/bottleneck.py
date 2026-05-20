@@ -81,7 +81,7 @@ def compute_gender_survival_by_stage(conn: duckdb.DuckDBPyConnection) -> dict[st
         grp_m = df[df["gender"] == "M"].copy()
 
         # event = reached stage >= threshold, duration = years until event or censoring
-        def _build(grp: "pd.DataFrame") -> tuple[list, list]:
+        def _build(grp: pd.DataFrame) -> tuple[list, list]:
             durs, evts = [], []
             for _, row in grp.iterrows():
                 reached = int(row["highest_stage"] >= stage_threshold)

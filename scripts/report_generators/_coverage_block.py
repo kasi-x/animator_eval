@@ -114,7 +114,7 @@ def _ratio_display(ratio: float) -> str:
 
 
 def _build_role_summary_rows(
-    matrix: "CoverageMatrix",  # noqa: F821  (avoid circular at module level)
+    matrix: CoverageMatrix,  # noqa: F821  (avoid circular at module level)
     max_rows: int = 12,
 ) -> str:
     """Build HTML <tr> rows for role_group mean coverage per source.
@@ -162,7 +162,7 @@ def _build_role_summary_rows(
 
 
 def coverage_block_html(
-    matrix: "CoverageMatrix",  # noqa: F821
+    matrix: CoverageMatrix,  # noqa: F821
     *,
     show_table: bool = True,
     max_table_rows: int = 12,
@@ -242,7 +242,7 @@ _REFERENCE_SOURCE_LABEL = "ANN (最も網羅的な参照 source)"
 
 
 def coverage_summary_text(
-    matrix: "CoverageMatrix",  # noqa: F821
+    matrix: CoverageMatrix,  # noqa: F821
 ) -> str:
     """Return a plain-text coverage summary for Data Statement injection.
 
@@ -279,7 +279,7 @@ def coverage_summary_text(
 
 
 def inject_coverage_block_into_wrap_html_v2_args(
-    matrix: "CoverageMatrix",  # noqa: F821
+    matrix: CoverageMatrix,  # noqa: F821
     *,
     show_table: bool = True,
 ) -> str:

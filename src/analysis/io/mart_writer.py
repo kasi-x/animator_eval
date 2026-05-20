@@ -23,7 +23,8 @@ import datetime
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+from collections.abc import Iterator
 
 import duckdb
 import structlog
@@ -977,7 +978,7 @@ def write_score_frozen(
     pixi_lock_hash: str = "",
     resolved_db_hash: str = "",
     notes: str = "",
-    gold_path: "Path | str | None" = None,
+    gold_path: Path | str | None = None,
 ) -> str:
     """Upsert a frozen score snapshot into mart.meta_score_frozen.
 
@@ -1086,7 +1087,7 @@ class GoldWriter:
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._swap_ctx = None
 
-    def __enter__(self) -> "GoldWriter":
+    def __enter__(self) -> GoldWriter:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = duckdb.connect(str(self._path))
         self._conn.execute(f"SET memory_limit='{self._memory_limit}'")

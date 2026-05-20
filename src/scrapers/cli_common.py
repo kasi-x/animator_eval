@@ -24,7 +24,7 @@ The typer.Option metadata (flag names, help text) is attached to the type via
 from __future__ import annotations
 
 from pathlib import Path
-from typing_extensions import Annotated
+from typing import Annotated
 
 import typer
 

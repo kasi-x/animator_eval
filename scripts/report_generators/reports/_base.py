@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 
 def _build_coverage_block_html(
-    matrix: "CoverageMatrix | None",
+    matrix: CoverageMatrix | None,
 ) -> str:
     """Return coverage caveat block HTML for injection into every report.
 
@@ -221,7 +221,7 @@ class BaseReportGenerator(ABC):
         intro_html: str = "",
         data_statement_params: DataStatementParams | None = None,
         extra_glossary: dict[str, str] | None = None,
-        coverage_matrix: "CoverageMatrix | None" = None,
+        coverage_matrix: CoverageMatrix | None = None,
     ) -> Path:
         """Write a v2-compliant HTML report file.
 
@@ -302,15 +302,15 @@ class BaseReportGenerator(ABC):
 
     def render_unified_structure(
         self,
-        sections: list["ReportSection"],
+        sections: list[ReportSection],
         meta_table: str | None = None,
         *,
         overview_html: str = "",
         interpretation_html: str = "",
-        data_statement_params: "DataStatementParams | None" = None,
-        extra_glossary: "dict[str, str] | None" = None,
-        coverage_matrix: "CoverageMatrix | None" = None,
-    ) -> "Path":
+        data_statement_params: DataStatementParams | None = None,
+        extra_glossary: dict[str, str] | None = None,
+        coverage_matrix: CoverageMatrix | None = None,
+    ) -> Path:
         """Render a report using the mandatory v2 unified section structure.
 
         Structure enforced:

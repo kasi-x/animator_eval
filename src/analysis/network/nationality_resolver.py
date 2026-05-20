@@ -263,7 +263,7 @@ class NationalitySummary:
     coverage_pct: float = 0.0
 
     @classmethod
-    def from_records(cls, records: list[NationalityRecord]) -> "NationalitySummary":
+    def from_records(cls, records: list[NationalityRecord]) -> NationalitySummary:
         """Compute summary from resolved nationality records."""
         total = len(records)
         n_high = sum(1 for r in records if r.confidence == CONF_HIGH)

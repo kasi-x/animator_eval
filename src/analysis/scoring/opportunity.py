@@ -494,8 +494,8 @@ class _PanelObservation:
 
 
 def _build_panel_from_credits(
-    credits: list["Credit"],
-    anime_map: dict[str, "Anime"],
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
     theta_map: dict[str, float] | None,
 ) -> list[_PanelObservation]:
     """Construct per-(person, year) panel observations from credits.
@@ -598,8 +598,8 @@ def _encode_categorical_fe(
 
 
 def compute_opportunity_residual_from_credits(
-    credits: list["Credit"],
-    anime_map: dict[str, "Anime"],
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
     theta_map: dict[str, float] | None = None,
     n_permutations: int = N_PERMUTATIONS,
     rng: np.random.Generator | None = None,

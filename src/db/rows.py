@@ -78,7 +78,7 @@ class PersonRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "PersonRow":
+    def from_row(cls, row) -> PersonRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -115,7 +115,7 @@ class AnimeRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "AnimeRow":
+    def from_row(cls, row) -> AnimeRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -142,7 +142,7 @@ class CreditRow:
     position: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "CreditRow":
+    def from_row(cls, row) -> CreditRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -167,7 +167,7 @@ class ScoreRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "ScoreRow":
+    def from_row(cls, row) -> ScoreRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -194,7 +194,7 @@ class ScoreHistoryRow:
     quarter: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "ScoreHistoryRow":
+    def from_row(cls, row) -> ScoreHistoryRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -216,7 +216,7 @@ class VARow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "VARow":
+    def from_row(cls, row) -> VARow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -255,7 +255,7 @@ class FeatPersonScoresRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatPersonScoresRow":
+    def from_row(cls, row) -> FeatPersonScoresRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -282,7 +282,7 @@ class FeatNetworkRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatNetworkRow":
+    def from_row(cls, row) -> FeatNetworkRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -313,7 +313,7 @@ class FeatCareerRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatCareerRow":
+    def from_row(cls, row) -> FeatCareerRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -333,7 +333,7 @@ class FeatGenreAffinityRow:
     work_count: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatGenreAffinityRow":
+    def from_row(cls, row) -> FeatGenreAffinityRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -355,7 +355,7 @@ class FeatContributionRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatContributionRow":
+    def from_row(cls, row) -> FeatContributionRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -392,7 +392,7 @@ class FeatCreditActivityRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatCreditActivityRow":
+    def from_row(cls, row) -> FeatCreditActivityRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -427,7 +427,7 @@ class FeatCareerAnnualRow:
     works_other: int = 0
 
     @classmethod
-    def from_row(cls, row) -> "FeatCareerAnnualRow":
+    def from_row(cls, row) -> FeatCareerAnnualRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -449,7 +449,7 @@ class FeatStudioAffiliationRow:
     is_main_studio: int = 0
 
     @classmethod
-    def from_row(cls, row) -> "FeatStudioAffiliationRow":
+    def from_row(cls, row) -> FeatStudioAffiliationRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -478,7 +478,7 @@ class FeatCreditContributionRow:
     is_debut_work: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatCreditContributionRow":
+    def from_row(cls, row) -> FeatCreditContributionRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -505,7 +505,7 @@ class FeatPersonWorkSummaryRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatPersonWorkSummaryRow":
+    def from_row(cls, row) -> FeatPersonWorkSummaryRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -526,7 +526,7 @@ class AggMilestoneRow:
     description: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "AggMilestoneRow":
+    def from_row(cls, row) -> AggMilestoneRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -547,7 +547,7 @@ class AggDirectorCircleRow:
     latest_year: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "AggDirectorCircleRow":
+    def from_row(cls, row) -> AggDirectorCircleRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -570,7 +570,7 @@ class FeatMentorshipRow:
     latest_year: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatMentorshipRow":
+    def from_row(cls, row) -> FeatMentorshipRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -593,7 +593,7 @@ class FeatClusterMembershipRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatClusterMembershipRow":
+    def from_row(cls, row) -> FeatClusterMembershipRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -615,7 +615,7 @@ class FeatCausalEstimatesRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatCausalEstimatesRow":
+    def from_row(cls, row) -> FeatCausalEstimatesRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -654,7 +654,7 @@ class FeatWorkContextRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatWorkContextRow":
+    def from_row(cls, row) -> FeatWorkContextRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -678,7 +678,7 @@ class FeatPersonRoleProgressionRow:
     still_active: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatPersonRoleProgressionRow":
+    def from_row(cls, row) -> FeatPersonRoleProgressionRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -699,7 +699,7 @@ class FeatBirankAnnualRow:
     n_credits_cumulative: int | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatBirankAnnualRow":
+    def from_row(cls, row) -> FeatBirankAnnualRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -726,7 +726,7 @@ class AggPersonCareerRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "AggPersonCareerRow":
+    def from_row(cls, row) -> AggPersonCareerRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -748,7 +748,7 @@ class FeatCareerScoresRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatCareerScoresRow":
+    def from_row(cls, row) -> FeatCareerScoresRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -769,7 +769,7 @@ class AggPersonNetworkRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "AggPersonNetworkRow":
+    def from_row(cls, row) -> AggPersonNetworkRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -795,7 +795,7 @@ class FeatNetworkScoresRow:
     updated_at: str | None = None
 
     @classmethod
-    def from_row(cls, row) -> "FeatNetworkScoresRow":
+    def from_row(cls, row) -> FeatNetworkScoresRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -817,7 +817,7 @@ class CorrectionsCreditYearRow:
     corrected_by: str = ""
 
     @classmethod
-    def from_row(cls, row) -> "CorrectionsCreditYearRow":
+    def from_row(cls, row) -> CorrectionsCreditYearRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 
@@ -840,7 +840,7 @@ class CorrectionsRoleRow:
     corrected_by: str = ""
 
     @classmethod
-    def from_row(cls, row) -> "CorrectionsRoleRow":
+    def from_row(cls, row) -> CorrectionsRoleRow:
         return _from_sqlite_row(cls, row)  # type: ignore[return-value]
 
 

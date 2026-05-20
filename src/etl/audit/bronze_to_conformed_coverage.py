@@ -358,7 +358,7 @@ class BronzeTableInfo:
     source: str
     table: str
     row_count: int
-    error: Optional[str] = field(default=None)
+    error: str | None = field(default=None)
 
 
 @dataclass

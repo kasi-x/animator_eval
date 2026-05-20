@@ -246,7 +246,7 @@ def _rows_to_arrow_persons(
     rows: list[dict[str, Any]],
     fields: list[str],
     not_null_str: frozenset[str],
-) -> "Any":
+) -> Any:
     """Convert persons row dicts to a PyArrow table for bulk insert."""
     import pyarrow as pa
 

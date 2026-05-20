@@ -23,7 +23,8 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Hashable, Iterable
+from typing import Any
+from collections.abc import Hashable, Iterable
 
 import structlog
 
@@ -107,7 +108,7 @@ class Checkpoint:
     # ── Construction / persistence ─────────────────────────────────────────
 
     @classmethod
-    def load(cls, path: Path | str) -> "Checkpoint":
+    def load(cls, path: Path | str) -> Checkpoint:
         """Load checkpoint or return an empty one if missing/unparsable.
 
         Equivalent to `Checkpoint(path)` since the constructor now auto-loads.

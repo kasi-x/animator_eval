@@ -31,8 +31,8 @@ class MethodGate:
     method_name: str
     algorithm: str
     confidence_interval_method: str
-    null_model: Optional[str] = None
-    validation_method: Optional[str] = None
+    null_model: str | None = None
+    validation_method: str | None = None
     limitations: list[str] = field(default_factory=list)
     
     def to_dict(self) -> dict:
@@ -78,7 +78,7 @@ class ReportBriefMetadata:
     version: str = "2.0"
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     method_gates: list[MethodGate] = field(default_factory=list)
-    lineage: Optional[LineageMetadata] = None
+    lineage: LineageMetadata | None = None
     
     def to_dict(self) -> dict:
         """Convert to dict for JSON serialization."""
@@ -125,7 +125,7 @@ class ReportBrief:
         )
         self.sections: dict[str, dict] = {}
         self.method_gates: list[MethodGate] = []
-        self.lineage: Optional[LineageMetadata] = None
+        self.lineage: LineageMetadata | None = None
     
     def add_method_gate(self, gate: MethodGate) -> None:
         """Register a method gate for this report.
@@ -160,9 +160,9 @@ class ReportBrief:
         section_id: str,
         title: str,
         findings: str,
-        interpretation: Optional[str] = None,
-        charts: Optional[list[str]] = None,
-        metadata: Optional[dict] = None,
+        interpretation: str | None = None,
+        charts: list[str] | None = None,
+        metadata: dict | None = None,
     ) -> None:
         """Add a section to the report.
         

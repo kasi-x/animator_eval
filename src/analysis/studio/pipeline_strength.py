@@ -174,7 +174,7 @@ def _top_k_concentration(shares: list[float], k: int = 3) -> float:
 
 def _bootstrap_ci(
     values: np.ndarray,
-    stat_fn: "Callable[[np.ndarray], float]",
+    stat_fn: Callable[[np.ndarray], float],
     rng: np.random.Generator,
     n_bootstrap: int,
 ) -> tuple[float, float] | None:

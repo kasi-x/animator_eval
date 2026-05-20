@@ -19,7 +19,7 @@ import structlog
 log = structlog.get_logger(__name__)
 
 
-def load_json(file_path: str) -> Optional[dict]:
+def load_json(file_path: str) -> dict | None:
     """Load JSON file safely."""
     try:
         with open(file_path) as f:

@@ -184,7 +184,7 @@ def render_ci_scatter(spec: CIScatterSpec, *, theme: str = "dark") -> go.Figure:
                     thickness=spec.line_width,
                     width=6,
                 ),
-                name=("有意 (p<{:g})".format(spec.significance_threshold))
+                name=(f"有意 (p<{spec.significance_threshold:g})")
                 if sig
                 else "非有意",
                 hovertext=hover,

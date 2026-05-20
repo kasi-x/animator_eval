@@ -518,7 +518,7 @@ class CareerTypologyReport(BaseReportGenerator):
 # ---------------------------------------------------------------------------
 # v3 SPEC
 # ---------------------------------------------------------------------------
-from .._spec import make_default_spec  # noqa: E402
+from .._spec import SensitivityAxis, make_default_spec  # noqa: E402
 
 SPEC = make_default_spec(
     name="career_typology",
@@ -531,16 +531,29 @@ SPEC = make_default_spec(
         "クレジット記録の役職タイトル変化が実際のキャリア段階変化に対応する。"
         "Gap 年 (credits なし) は系列から除外し補完しない。"
         "Markov 仮定: 翌年の stage は当年の stage のみに依存 (メモリなし)。"
+        "Optimal Matching 距離は substitution / indel コスト設定に強く依存し、"
+        "等距離仮定の妥当性を sensitivity_grid で確認する。短系列の多い個人は "
+        "距離計算で過小評価されやすい構造的 bias を持つ。"
     ),
     null_model=["N4"],
     sources=["credits"],
     meta_table="meta_career_typology",
     estimator="Optimal Matching distance + Ward hierarchical clustering",
     ci_estimator="analytical_se",
+    sensitivity_grid=[
+        SensitivityAxis(name="om_indel_cost", values=[0.5, 1.0, 2.0]),
+        SensitivityAxis(name="cluster_k", values=[3, 5, 7]),
+        SensitivityAxis(name="min_sequence_length", values=[3, 5, 10]),
+    ],
     extra_limitations=[
         "OM 距離は sequence 長に依存するため、短系列の多い個人が不利な可能性",
         "Gap 年補完なしのため、非連続的クレジット者の系列は分断されうる",
         "CAREER_STAGE の数値間隔が等距離と仮定されているが実際は不均等",
         "TV アニメ中心のカバレッジにより劇場・OVA 専業者は系列が短くなりやすい",
     ],
+    alternative_interpretations=(
+        "k 個の canonical 軌跡類型は実際のキャリアパターンではなく OM 距離 + Ward の hierarchical bias によって生じる artifact である可能性。k-medoids / DTW で再分割すると別の cluster 構成を返す可能性がある。",
+        "短系列 person の cluster 帰属は overall 距離が低いことの artifact (sequence 長による距離 normalization 不足) であり、min_sequence_length 引き上げで結論が大きく変動する可能性。",
+        "silhouette ≥ 0.2 は cluster 分離性の弱い下限値で、別 metric (Davies-Bouldin / Calinski-Harabasz) では別の最適 k を返す可能性がある。多指標 consensus が望ましい。",
+    ),
 )

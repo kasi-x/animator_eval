@@ -32,7 +32,7 @@ class BriefHTMLRenderer:
     
     brief_id: str
     title: str
-    output_path: Optional[str] = None
+    output_path: str | None = None
     
     CSS_TEMPLATE = """
     <style>
@@ -396,7 +396,7 @@ class BriefHTMLRenderer:
             return False
 
 
-def render_brief_html(brief_id: str, output_dir: str = "result/html") -> Optional[str]:
+def render_brief_html(brief_id: str, output_dir: str = "result/html") -> str | None:
     """Render a brief from JSON to HTML.
     
     Args:

@@ -108,7 +108,7 @@ WHERE rowid IN (
 
 
 def dedup(
-    conn: "duckdb.DuckDBPyConnection",
+    conn: duckdb.DuckDBPyConnection,
     dry_run: bool = False,
     force: bool = False,
 ) -> dict[str, object]:
@@ -193,7 +193,7 @@ def dedup(
 # ---------------------------------------------------------------------------
 
 
-def _log_sample(conn: "duckdb.DuckDBPyConnection", to_delete: int) -> None:
+def _log_sample(conn: duckdb.DuckDBPyConnection, to_delete: int) -> None:
     """Log a sample of rows that would be deleted for human inspection."""
     if to_delete == 0:
         log.info("credits_dedup.sample: nothing to delete")

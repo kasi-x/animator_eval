@@ -73,7 +73,7 @@ class KeyframeApiClient:
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def __aenter__(self) -> "KeyframeApiClient":
+    async def __aenter__(self) -> KeyframeApiClient:
         return self
 
     async def __aexit__(self, *_: object) -> None:
@@ -85,7 +85,7 @@ class KeyframeApiClient:
 
     async def _get(
         self, url: str, *, headers: dict[str, str] | None = None
-    ) -> "object | None":
+    ) -> object | None:
         """GET url with shared 404→None / 429→KeyframeQuotaExceeded handling.
 
         Returns the raw httpx.Response when the call succeeded (caller decides

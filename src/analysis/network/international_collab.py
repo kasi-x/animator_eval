@@ -729,7 +729,7 @@ def run_permutation_test(
 
 
 def load_credits_for_international(
-    conn: "sqlite3.Connection",
+    conn: sqlite3.Connection,
 ) -> list[tuple[str, str, str, int | None]]:
     """Load credit rows needed for international analysis from Resolved/SILVER layer.
 
@@ -782,7 +782,7 @@ def load_credits_for_international(
 
 
 def analyze_international_collab(
-    conn: "sqlite3.Connection",
+    conn: sqlite3.Connection,
     *,
     perm_rounds: int = _PERM_ROUNDS,
     louvain_resolution: float = 1.0,

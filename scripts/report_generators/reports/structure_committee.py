@@ -145,7 +145,7 @@ class StructureCommitteeReport(BaseReportGenerator):
     # Coverage note
     # ------------------------------------------------------------------
 
-    def _build_coverage_note(self, result: "CommitteeCentralityResult") -> str:
+    def _build_coverage_note(self, result: CommitteeCentralityResult) -> str:
         warning = ""
         if result.low_coverage_warning:
             warning = (
@@ -165,7 +165,7 @@ class StructureCommitteeReport(BaseReportGenerator):
     # Overview
     # ------------------------------------------------------------------
 
-    def _build_overview(self, result: "CommitteeCentralityResult") -> str:
+    def _build_overview(self, result: CommitteeCentralityResult) -> str:
         n_periods = len({h.period for h in result.period_hhi if h.hhi is not None})
         n_companies = result.n_unique_companies
         n_anime = result.n_unique_anime
@@ -189,7 +189,7 @@ class StructureCommitteeReport(BaseReportGenerator):
     def _build_centrality_section(
         self,
         sb: SectionBuilder,
-        result: "CommitteeCentralityResult",
+        result: CommitteeCentralityResult,
         coverage_note: str,
     ) -> ReportSection:
         if not result.centralities:
@@ -306,7 +306,7 @@ class StructureCommitteeReport(BaseReportGenerator):
     def _build_hhi_section(
         self,
         sb: SectionBuilder,
-        result: "CommitteeCentralityResult",
+        result: CommitteeCentralityResult,
         coverage_note: str,
     ) -> ReportSection:
         rows = [h for h in result.period_hhi if h.hhi is not None]
@@ -392,7 +392,7 @@ class StructureCommitteeReport(BaseReportGenerator):
     def _build_coverage_section(
         self,
         sb: SectionBuilder,
-        result: "CommitteeCentralityResult",
+        result: CommitteeCentralityResult,
         coverage_note: str,
     ) -> ReportSection:
         findings_html = (
@@ -428,7 +428,7 @@ class StructureCommitteeReport(BaseReportGenerator):
     # Interpretation
     # ------------------------------------------------------------------
 
-    def _build_interpretation(self, result: "CommitteeCentralityResult") -> str:
+    def _build_interpretation(self, result: CommitteeCentralityResult) -> str:
         hhi_rows = {h.period: h for h in result.period_hhi if h.hhi is not None}
         lines: list[str] = []
 
@@ -497,7 +497,7 @@ _GLOSSARY: dict[str, str] = {
 
 
 # v3 minimal SPEC
-from .._spec import make_default_spec  # noqa: E402
+from .._spec import SensitivityAxis, make_default_spec  # noqa: E402
 
 SPEC = make_default_spec(
     name="structure_committee",
@@ -511,6 +511,9 @@ SPEC = make_default_spec(
         "委員会クレジット (seesaawiki / madb) は出資構造の合理的サンプル代理。 "
         "出資者社名は表記揺れ未補正の生データであり、表記揺れは独立に分布する。 "
         "2017 境界は descriptive contrast 用であり、 causal cut-off ではない。"
+        "出資者 entity resolution が未実施で表記揺れ (株式会社プレフィックス等) が "
+        "centrality / HHI 計算に bias を入れる可能性が残存する。sensitivity grid で "
+        "name-normalization 適用前後の結果差を確認する。"
     ),
     null_model=["N6"],
     sources=["anime", "anime_production_committee"],
@@ -518,10 +521,21 @@ SPEC = make_default_spec(
     estimator="bipartite projection + eigenvector centrality + HHI",
     ci_estimator="analytical_se",
     n_resamples=None,
+    sensitivity_grid=[
+        SensitivityAxis(name="name_normalization", values=["raw", "strip_prefix", "fuzzy_merge_0.9"]),
+        SensitivityAxis(name="time_split_year", values=[2015, 2017, 2019]),
+        SensitivityAxis(name="min_anime_per_committee", values=[1, 3, 5]),
+    ],
     extra_limitations=[
         "委員会クレジットカバレッジは限定的 (近年 TV シリーズ偏重)",
         "出資者 entity resolution 未実施 (株式会社プレフィックス等の表記揺れ)",
         "2017 境界は descriptive contrast 用、 causal cut-off ではない",
         "null model 未実装 (将来課題)",
     ],
+    alternative_interpretations=(
+        "観察された 2017 前後の差異は配信拡大ではなく seesaawiki / madb の出資者 credit 充実度の年代偏り (近年ほど詳細) を反映している可能性。coverage 補正後の再評価要。",
+        "eigenvector centrality の高値は構造的影響力ではなく "
+        "表記揺れによる同一企業の複数 node 化が降下しないままの artifact である可能性。fuzzy merge 適用後の再計算要。",
+        "company–company projection の HHI は per-anime cap (1 アニメに最大 N 出資者) に依存し、tail 委員会 (8 社以上) を打ち切ると集中度が見かけ上低下する可能性。",
+    ),
 )

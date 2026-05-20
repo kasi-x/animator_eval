@@ -135,6 +135,34 @@ REPORT_LINKS: dict[str, list[CrossRef]] = {
                  "related", "mentor 単位 vs 個別 pair 観察"),
         CrossRef("causal_studio_transfer", "DiD: スタジオ移籍",
                  "caveat", "両者とも matched DiD だが treatment が異なる"),
+        CrossRef("spillover_effects", "Peer spillover",
+                 "related", "mentor 効果 vs peer mean coefficient の比較"),
+    ],
+
+    # ─── Session 3 (2026-05-20): 残 3 analysis v2 化 ─────────────────────
+    "survival_curves": [
+        CrossRef("career_visibility_warning", "可視性喪失早期警告",
+                 "related", "visibility_loss を event とする KM の上流"),
+        CrossRef("career_typology", "Career typology",
+                 "related", "typology cluster ごとの生存曲線対比"),
+        CrossRef("policy_attrition", "新卒離職 因果分解",
+                 "caveat", "KM は離職 ≠ 可視性喪失の区別を明示する"),
+    ],
+    "structural_break": [
+        CrossRef("policy_generational_health", "世代交代健全性",
+                 "related", "年次時系列の構造変化点"),
+        CrossRef("cohort_inequality", "Cohort 不平等",
+                 "related", "Gini 時系列に break 検定を適用"),
+        CrossRef("causal_studio_transfer", "DiD: スタジオ移籍",
+                 "caveat", "break 検出は記述的、因果解釈は別 identification"),
+    ],
+    "spillover_effects": [
+        CrossRef("mentor_effect", "Mentor effect",
+                 "related", "peer effect と mentor effect の比較"),
+        CrossRef("network_resilience", "Network resilience",
+                 "related", "peer 集中 graph の構造的脆弱性"),
+        CrossRef("akm_diagnostics", "AKM diagnostics",
+                 "caveat", "theta_i 推定精度が β_peer に直接影響"),
     ],
 
     # ─── Index / 共通 ─────────────────────────────────────────────────

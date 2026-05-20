@@ -14,7 +14,8 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import numpy as np
 import structlog
@@ -1749,10 +1750,10 @@ _KEEP_IN_MEMORY = frozenset(
 def _build_phase9_input_hash(context: dict) -> str:
     """Build deterministic hash for Phase 9 inputs."""
     digest = hashlib.sha256()
-    digest.update(f"credits={len(context.credits)}".encode("utf-8"))
-    digest.update(f"persons={len(context.persons)}".encode("utf-8"))
-    digest.update(f"anime={len(context.anime_map)}".encode("utf-8"))
-    digest.update(f"results={len(context.results)}".encode("utf-8"))
+    digest.update(f"credits={len(context.credits)}".encode())
+    digest.update(f"persons={len(context.persons)}".encode())
+    digest.update(f"anime={len(context.anime_map)}".encode())
+    digest.update(f"results={len(context.results)}".encode())
 
     # Include stable subset of structural scores (person_id-ordered).
     for row in sorted(context.results, key=lambda r: r.get("person_id", "")):
@@ -1763,7 +1764,7 @@ def _build_phase9_input_hash(context: dict) -> str:
         pa = float(row.get("patronage", 0.0) or 0.0)
         do = float(row.get("dormancy", 1.0) or 1.0)
         digest.update(
-            f"{pid}|{iv:.8f}|{fe:.8f}|{br:.8f}|{pa:.8f}|{do:.8f}".encode("utf-8")
+            f"{pid}|{iv:.8f}|{fe:.8f}|{br:.8f}|{pa:.8f}|{do:.8f}".encode()
         )
 
     return digest.hexdigest()
@@ -1795,7 +1796,7 @@ def _filter_cached_tasks(
             runnable.append(task)
             continue
         task_hash = hashlib.sha256(
-            f"{phase_input_hash}|{task.name}|v1".encode("utf-8")
+            f"{phase_input_hash}|{task.name}|v1".encode()
         ).hexdigest()
         out_path = json_dir / f"{task.name}.json"
         if recorded.get(task.name) == task_hash and out_path.exists():
@@ -1901,7 +1902,7 @@ def _record_batch_completion(
     items = [
         (
             name,
-            hashlib.sha256(f"{phase_input_hash}|{name}|v1".encode("utf-8")).hexdigest(),
+            hashlib.sha256(f"{phase_input_hash}|{name}|v1".encode()).hexdigest(),
             str(json_dir / f"{name}.json"),
         )
         for name in done_names

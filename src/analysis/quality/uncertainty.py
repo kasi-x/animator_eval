@@ -21,7 +21,7 @@ Usage example (bootstrap CI on Gini)::
 from __future__ import annotations
 
 import math
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 

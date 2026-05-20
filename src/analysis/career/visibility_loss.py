@@ -195,7 +195,7 @@ def build_credit_panel(
         {(person_id, year): PersonYearRow} の辞書。
         年度は min_year から max_year まで、クレジットが存在する行のみ含む。
     """
-    sql = """
+    sql = f"""
         SELECT
             c.person_id,
             c.credit_year AS year,
@@ -211,7 +211,7 @@ def build_credit_panel(
           AND c.credit_year >= {min_year}
           AND c.credit_year <= {max_year}
         GROUP BY c.person_id, c.credit_year
-    """.format(min_year=min_year, max_year=max_year)
+    """
 
     try:
         rows = conn.execute(sql).fetchall()

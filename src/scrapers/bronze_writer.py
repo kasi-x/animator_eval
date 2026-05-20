@@ -91,7 +91,7 @@ class BronzeWriter:
     def root(self) -> Path:
         return self._root
 
-    def __enter__(self) -> "BronzeWriter":
+    def __enter__(self) -> BronzeWriter:
         return self
 
     def __exit__(self, exc_type, *_: object) -> None:
@@ -178,7 +178,7 @@ class BronzeWriterGroup:
             for t in tables
         }
 
-    def __enter__(self) -> "BronzeWriterGroup":
+    def __enter__(self) -> BronzeWriterGroup:
         return self
 
     def __exit__(self, exc_type, *_: object) -> None:
@@ -212,10 +212,10 @@ class BronzeWriterGroup:
 def write_sakuga_atwiki_bronze(
     persons: list,  # list[ParsedSakugaPerson]
     pages_metadata: list[dict],
-    output_dir: "Path | str",
+    output_dir: Path | str,
     date_partition: str,
-    raw_texts: "dict[int, str] | None" = None,
-    works: "list | None" = None,  # list[ParsedSakugaWork]
+    raw_texts: dict[int, str] | None = None,
+    works: list | None = None,  # list[ParsedSakugaWork]
 ) -> dict[str, Path]:
     """Write src_sakuga_atwiki_{pages,persons,credits,work_staff} parquet.
 

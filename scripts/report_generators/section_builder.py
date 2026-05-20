@@ -520,7 +520,7 @@ class SectionBuilder:
         self._check_interpretation_has_alt(interpretation_html)
 
     @staticmethod
-    def _render_kpi_strip_block(section: "ReportSection") -> str:
+    def _render_kpi_strip_block(section: ReportSection) -> str:
         """v3: KPI 要点先出しストリップ (industry_overview.html 風).
 
         Curated ``section.kpi_cards`` 優先。空のときは findings から
@@ -552,11 +552,11 @@ class SectionBuilder:
         )
 
     @staticmethod
-    def _render_findings_block(section: "ReportSection") -> str:
+    def _render_findings_block(section: ReportSection) -> str:
         return f'  <div class="findings">\n    {section.findings_html}\n  </div>'
 
     @staticmethod
-    def _default_chart_caption(section: "ReportSection") -> str:
+    def _default_chart_caption(section: ReportSection) -> str:
         """v3: chart_caption 未指定時のデフォルト 1 文。
 
         section.title から「この図は X を示す。横軸/縦軸/凡例は本文と
@@ -571,7 +571,7 @@ class SectionBuilder:
         )
 
     @classmethod
-    def _render_visualization_block(cls, section: "ReportSection") -> str:
+    def _render_visualization_block(cls, section: ReportSection) -> str:
         if not section.visualization_html:
             return ""
         caption = section.chart_caption or cls._default_chart_caption(section)
@@ -586,7 +586,7 @@ class SectionBuilder:
         )
 
     @staticmethod
-    def _render_method_note_block(section: "ReportSection") -> str:
+    def _render_method_note_block(section: ReportSection) -> str:
         if not section.method_note:
             return ""
         return (
@@ -597,7 +597,7 @@ class SectionBuilder:
         )
 
     @staticmethod
-    def _render_interpretation_block(section: "ReportSection") -> str:
+    def _render_interpretation_block(section: ReportSection) -> str:
         if not section.interpretation_html:
             return ""
         return f"{_INTERPRETATION_HEADER_HTML}    {section.interpretation_html}\n  </div>"

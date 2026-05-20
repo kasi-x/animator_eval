@@ -20,7 +20,6 @@ import datetime
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import duckdb
 import structlog
@@ -52,7 +51,7 @@ logger = structlog.get_logger()
 
 # Type alias: (silver_table, silver_filter, bronze_distinct_expr)
 # bronze_distinct_expr=None means COUNT(*) (no dedup needed / unknown key)
-_MappingValue = Optional[tuple[str, Optional[str], Optional[str]]]
+_MappingValue = tuple[str, str | None, str | None] | None
 
 SOURCE_TABLE_TO_SILVER: dict[tuple[str, str], _MappingValue] = {
     # ── AniList ────────────────────────────────────────────────────────────
@@ -215,12 +214,12 @@ class CoverageRow:
     source: str
     bronze_table: str
     bronze_rows: int
-    silver_target: Optional[str]  # None = unmapped
-    silver_filter: Optional[str]  # None = full table count used
+    silver_target: str | None  # None = unmapped
+    silver_filter: str | None  # None = full table count used
     silver_rows: int
-    coverage: Optional[float]  # None = unmapped
+    coverage: float | None  # None = unmapped
     unmapped: bool
-    error: Optional[str] = field(default=None)
+    error: str | None = field(default=None)
 
     @property
     def coverage_pct(self) -> str:
@@ -282,8 +281,8 @@ def _count_bronze_rows(
     bronze_root: Path,
     source: str,
     table: str,
-    distinct_expr: Optional[str] = None,
-) -> tuple[int, Optional[str]]:
+    distinct_expr: str | None = None,
+) -> tuple[int, str | None]:
     """Return (row_count, error_msg).  error_msg is None on success.
 
     When *distinct_expr* is provided the query uses
@@ -312,8 +311,8 @@ def _count_bronze_rows(
 def _count_silver_rows(
     conn: duckdb.DuckDBPyConnection,
     silver_table: str,
-    silver_filter: Optional[str],
-) -> tuple[int, Optional[str]]:
+    silver_filter: str | None,
+) -> tuple[int, str | None]:
     """Return (row_count, error_msg).  error_msg is None on success."""
     try:
         if silver_filter:
@@ -450,7 +449,7 @@ def sample_missing_rows(
     bronze_table: str,
     silver_db: str | Path,
     silver_table: str,
-    silver_filter: Optional[str],
+    silver_filter: str | None,
     n: int = 10,
 ) -> list[dict]:
     """Return up to n BRONZE rows that have no matching SILVER row.

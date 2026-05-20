@@ -4,7 +4,6 @@ import json
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import Optional, List
 import structlog
 
 logger = structlog.get_logger()
@@ -20,7 +19,7 @@ class ReportVersion:
     file_path: str
     size_bytes: int
     sections_count: int
-    method_gates: List[str] = field(default_factory=list)
+    method_gates: list[str] = field(default_factory=list)
     
     def to_dict(self):
         return asdict(self)
@@ -29,9 +28,9 @@ class ReportVersion:
 class ReportHistory:
     """Complete version history for a report."""
     brief_id: str
-    versions: List[ReportVersion] = field(default_factory=list)
+    versions: list[ReportVersion] = field(default_factory=list)
     total_versions: int = 0
-    current_version: Optional[ReportVersion] = None
+    current_version: ReportVersion | None = None
     
     def add_version(self, version: ReportVersion):
         """Add a version to history."""
@@ -40,7 +39,7 @@ class ReportHistory:
         self.current_version = version
         logger.info("version_added", brief_id=self.brief_id, sha=version.version_sha)
     
-    def get_previous_version(self, offset: int = 1) -> Optional[ReportVersion]:
+    def get_previous_version(self, offset: int = 1) -> ReportVersion | None:
         """Get a previous version by offset."""
         idx = len(self.versions) - 1 - offset
         if idx >= 0:

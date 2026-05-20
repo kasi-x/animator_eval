@@ -240,7 +240,7 @@ class ColumnCoverageRow:
     total: int
     non_null: int
     non_empty: int  # non_null AND non-empty-string (for VARCHAR cols)
-    error: Optional[str] = field(default=None)
+    error: str | None = field(default=None)
 
     @property
     def null_rate(self) -> float:
@@ -265,7 +265,7 @@ class BronzeSourceStat:
     bronze_table: str
     bronze_col: str
     rows_with_value: int
-    error: Optional[str] = field(default=None)
+    error: str | None = field(default=None)
 
 
 @dataclass

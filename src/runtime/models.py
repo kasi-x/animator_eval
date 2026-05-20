@@ -1325,7 +1325,7 @@ class Person(BaseModel):
         )
 
     @classmethod
-    def from_db_row(cls, row: "PersonRow") -> "Person":
+    def from_db_row(cls, row: PersonRow) -> Person:
         return cls(
             id=row.id,
             name_ja=row.name_ja,
@@ -1477,7 +1477,7 @@ class BronzeAnime(BaseModel):
         return self.studios[0] if self.studios else None
 
     @classmethod
-    def from_db_row(cls, row: "AnimeRow") -> "BronzeAnime":
+    def from_db_row(cls, row: AnimeRow) -> BronzeAnime:
         genres_raw = getattr(row, "genres", "[]")
         tags_raw = getattr(row, "tags", "[]")
         studios_raw = getattr(row, "studios", "[]")
@@ -1632,7 +1632,7 @@ class Credit(BaseModel):
     )
 
     @classmethod
-    def from_db_row(cls, row: "CreditRow") -> "Credit":
+    def from_db_row(cls, row: CreditRow) -> Credit:
         src = row.evidence_source or ""
         return cls(
             person_id=row.person_id,
@@ -1677,7 +1677,7 @@ class ScoreResult(BaseModel):
     career_track: str = "multi_track"
 
     @classmethod
-    def from_db_row(cls, row: "ScoreRow") -> "ScoreResult":
+    def from_db_row(cls, row: ScoreRow) -> ScoreResult:
         return cls(
             person_id=row.person_id,
             person_fe=row.person_fe,

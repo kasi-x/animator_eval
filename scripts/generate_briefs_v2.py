@@ -134,7 +134,7 @@ def validate_briefs() -> tuple[bool, dict]:
             continue
         
         try:
-            with open(brief_file, "r", encoding="utf-8") as f:
+            with open(brief_file, encoding="utf-8") as f:
                 brief_dict = json.load(f)
             
             # Check required fields
@@ -219,9 +219,38 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate all report briefs (v2)")
     parser.add_argument("--validate-only", action="store_true", help="Only validate existing briefs")
     parser.add_argument("--no-summary", action="store_true", help="Suppress summary output")
-    
+    parser.add_argument(
+        "--export-html",
+        action="store_true",
+        help="Render brief JSON → HTML (result/reports/{policy,hr,business}_brief.html)",
+    )
+    parser.add_argument(
+        "--html-output-dir",
+        default="result/reports",
+        help="Output directory for brief HTML (default: result/reports)",
+    )
+
     args = parser.parse_args()
-    
+
+    if args.export_html:
+        from scripts.report_generators.export import render_brief_html
+
+        log.info("brief_html_export_start", output_dir=args.html_output_dir)
+        any_failed = False
+        for brief_id in ("policy", "hr", "business", "workers"):
+            json_path = Path(f"result/json/{brief_id}_brief.json")
+            if not json_path.exists():
+                log.warning("brief_json_missing", brief_id=brief_id, path=str(json_path))
+                continue
+            out = render_brief_html(brief_id, output_dir=args.html_output_dir)
+            if out is None:
+                log.error("brief_html_failed", brief_id=brief_id)
+                any_failed = True
+            else:
+                log.info("brief_html_written", brief_id=brief_id, path=out)
+                print(f"  -> {out}")
+        sys.exit(1 if any_failed else 0)
+
     if args.validate_only:
         log.info("brief_validation_start", mode="validate_only")
         all_valid, results = validate_briefs()

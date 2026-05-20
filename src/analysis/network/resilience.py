@@ -24,7 +24,7 @@ H2: 主観的評価 / 役割語 frame NG → "structural position" のみ。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from collections.abc import Sequence
 
 import networkx as nx
 import numpy as np

@@ -365,7 +365,7 @@ def _build_feature_importance(sb: SectionBuilder, data: dict) -> ReportSection:
     )
 
 
-def _build_cox_section(sb: SectionBuilder, data: dict) -> "ReportSection | None":
+def _build_cox_section(sb: SectionBuilder, data: dict) -> ReportSection | None:
     """Cox PH 並設 section (data.cox_results が存在する時のみレンダー)。
 
     cox_results schema:

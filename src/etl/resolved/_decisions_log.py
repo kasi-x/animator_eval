@@ -157,7 +157,7 @@ class DecisionsLogger:
         self.written = 0
         self.skipped = 0
 
-    def __enter__(self) -> "DecisionsLogger":
+    def __enter__(self) -> DecisionsLogger:
         self._fh = open(self.path, "a", encoding="utf-8")
         return self
 

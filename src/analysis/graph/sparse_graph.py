@@ -12,7 +12,8 @@ used as a drop-in replacement for collaboration_graph in the pipeline.
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from typing import Any
+from collections.abc import Iterator
 
 import numpy as np
 import scipy.sparse as sp
@@ -190,7 +191,7 @@ class SparseCollaborationGraph:
         sw = self.shared_works_matrix[iu, iv]
         return {"weight": float(w), "shared_works": int(sw)}
 
-    def subgraph(self, nodes) -> "SparseCollaborationGraph":
+    def subgraph(self, nodes) -> SparseCollaborationGraph:
         """Return a new SparseCollaborationGraph induced by the given nodes."""
         node_list = sorted(set(nodes) & set(self.node_to_idx.keys()))
         indices = [self.node_to_idx[n] for n in node_list]
@@ -210,7 +211,7 @@ class SparseCollaborationGraph:
         sg._n_edges = sp.triu(sg.weight_matrix, k=1).nnz
         return sg
 
-    def __getitem__(self, node: str) -> "_NodeView":
+    def __getitem__(self, node: str) -> _NodeView:
         """Support graph[u][v] access pattern."""
         return _NodeView(self, node)
 

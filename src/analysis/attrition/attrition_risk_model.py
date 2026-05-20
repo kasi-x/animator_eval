@@ -49,7 +49,7 @@ def train_survival_model(df: Any) -> tuple[Any, float, float, dict]:
     X_test = test[feature_cols].values.astype(float)
 
     # structured array for sksurv
-    def _to_structured(subset: "pd.DataFrame"):
+    def _to_structured(subset: pd.DataFrame):
         return np.array(
             [
                 (bool(row["event"]), float(row["duration"]))

@@ -323,7 +323,7 @@ def _clear_bronze_partitions(
     tables: list[str],
     *,
     date: str | None = None,
-    root: "Path | None" = None,
+    root: Path | None = None,
 ) -> int:
     """Delete all parquet files in the given (source, tables, date) partitions.
 
@@ -418,7 +418,7 @@ def _log_inline_experiment(
     title: str,
     regex_sections: list[dict],
     llm_records: list[dict],
-    data_dir: "Path",
+    data_dir: Path,
 ) -> None:
     """Save side-by-side comparison of regex vs LLM inline parsing to disk."""
     from collections import Counter
@@ -1192,7 +1192,7 @@ def _emit_single_person_credit(
     stats: dict,
     anime_id: str,
     name: str,
-    parsed: "ParsedCredit",
+    parsed: ParsedCredit,
     episode: int | None,
     total_episodes: int | None,
     source_listing_position: int | None,

@@ -18,7 +18,7 @@ H2: claim 表現は事実記述、formulation のみ。"優位" 等の評価語 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from collections.abc import Sequence
 
 import structlog
 

@@ -33,7 +33,7 @@ import structlog
 logger = structlog.get_logger()
 
 
-def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
+def _conformed_row_to_person(row: dict[str, Any]) -> Any:
     """Convert a conformed.persons dict to a runtime.models.Person.
 
     Only populates fields used by entity_resolution:

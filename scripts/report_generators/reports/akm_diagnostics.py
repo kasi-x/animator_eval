@@ -84,7 +84,7 @@ class AKMDiagnosticsReport(BaseReportGenerator):
                 "log(production_scale_ij) = theta_i + psi_j + epsilon。"
                 "推定には人物-スタジオ二部グラフの最大連結成分を使用する。"
                 "この成分に含まれない人物は、個人FEとスタジオFEの同時識別ができない。"
-                "連結集合のカバレッジ（{:.1f}%）が外的妥当性を規定する。".format(pct_in_set)
+                f"連結集合のカバレッジ（{pct_in_set:.1f}%）が外的妥当性を規定する。"
             ),
             section_id="connected_set",
         )

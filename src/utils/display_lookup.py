@@ -52,7 +52,7 @@ def clear_cache():
 
 def _get_source_info(
     anime_id: str,
-) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None, str | None, str | None]:
     """Parse anime_id to determine source and ID.
 
     Args:
@@ -86,7 +86,7 @@ def _get_source_info(
     return None, None, None, None
 
 
-def _open_bronze(bronze_path: Path | str | None) -> Optional[duckdb.DuckDBPyConnection]:
+def _open_bronze(bronze_path: Path | str | None) -> duckdb.DuckDBPyConnection | None:
     """Open an in-memory DuckDB connection with the bronze SQLite file attached.
 
     Returns None if the file does not exist, so callers can short-circuit.
@@ -103,7 +103,7 @@ def _query_bronze(
     anime_id: str,
     field: str,
     bronze_path: Path | str | None = None,
-) -> Optional[Any]:
+) -> Any | None:
     """Query a field from the appropriate bronze table.
 
     Args:
@@ -142,7 +142,7 @@ def _query_bronze(
 
 def get_display_score(
     anime_id: str, bronze_path: Path | str | None = None
-) -> Optional[float]:
+) -> float | None:
     """Get anime viewer score (anime.score from AniList).
 
     **DISPLAY ONLY** — NOT for analysis scoring. Returns None if unavailable.
@@ -165,7 +165,7 @@ def get_display_score(
 
 def get_display_popularity(
     anime_id: str, bronze_path: Path | str | None = None
-) -> Optional[int]:
+) -> int | None:
     """Get anime popularity rank from AniList.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
@@ -188,7 +188,7 @@ def get_display_popularity(
 
 def get_display_favourites(
     anime_id: str, bronze_path: Path | str | None = None
-) -> Optional[int]:
+) -> int | None:
     """Get anime favourites count from AniList.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
@@ -213,7 +213,7 @@ def _query_primary_description(
     anime_id: str,
     source: str,
     bronze_path: Path | str | None = None,
-) -> Optional[str]:
+) -> str | None:
     field = "synopsis" if source == "allcinema" else "description"
     return _query_bronze(anime_id, field, bronze_path)
 
@@ -221,7 +221,7 @@ def _query_primary_description(
 def _query_fallback_description(
     anime_id: str,
     bronze_path: Path | str | None = None,
-) -> Optional[str]:
+) -> str | None:
     """Look up allcinema synopsis via anime_external_ids cross-reference.
 
     anime_external_ids is a SILVER table that lives in the same SQLite file
@@ -259,7 +259,7 @@ def _query_fallback_description(
 
 def get_display_description(
     anime_id: str, bronze_path: Path | str | None = None
-) -> Optional[str]:
+) -> str | None:
     """Get anime description/synopsis from source.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
@@ -279,7 +279,7 @@ def get_display_description(
 
 def get_display_cover_url(
     anime_id: str, bronze_path: Path | str | None = None
-) -> Optional[str]:
+) -> str | None:
     """Get anime cover image URL.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
@@ -308,7 +308,7 @@ def get_display_cover_url(
 
 def get_display_genres(
     anime_id: str, bronze_path: Path | str | None = None
-) -> Optional[list[str]]:
+) -> list[str] | None:
     """Get anime genres as a list.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
@@ -344,7 +344,7 @@ def get_display_genres(
 
 def get_display_tags(
     anime_id: str, bronze_path: Path | str | None = None
-) -> Optional[list[dict]]:
+) -> list[dict] | None:
     """Get anime tags with metadata.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
@@ -378,7 +378,7 @@ def get_display_tags(
 
 def get_display_synonyms(
     anime_id: str, bronze_path: Path | str | None = None
-) -> Optional[list[str]]:
+) -> list[str] | None:
     """Get anime title synonyms/alternative titles.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
@@ -417,7 +417,7 @@ def get_display_synonyms(
 def get_display_metadata(
     anime_id: str,
     bronze_path: Path | str | None = None,
-) -> Optional[dict]:
+) -> dict | None:
     """Get all display metadata for an anime in one call.
 
     **DISPLAY ONLY** — NOT for analysis.

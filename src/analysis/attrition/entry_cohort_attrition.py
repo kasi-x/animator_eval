@@ -26,7 +26,7 @@ def build_entry_cohort_dataset(
     first_year_min: int = 2010,
     first_year_max: int = 2018,
     obs_window_end: int = 2020,
-) -> "list[dict]":
+) -> list[dict]:
     """Build a survival-time dataset for debut cohorts.
 
     Returns list of dicts with keys:

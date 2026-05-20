@@ -40,7 +40,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
 
 import structlog
 import yaml
@@ -433,7 +433,7 @@ _NEGATION_CONTEXT = re.compile(
 )
 
 
-def _is_definitional(finding: "Finding") -> bool:
+def _is_definitional(finding: Finding) -> bool:
     """True if the entire context IS the term, OR the term sits inside an
     explicit negation / prohibition / disclaimer / stance-block context.
 
@@ -447,7 +447,7 @@ def _is_definitional(finding: "Finding") -> bool:
     return bool(_NEGATION_CONTEXT.search(finding.context))
 
 
-def _is_excepted(finding: "Finding", exceptions: list[dict]) -> bool:
+def _is_excepted(finding: Finding, exceptions: list[dict]) -> bool:
     """True if a documented exception matches this finding."""
     for exc in exceptions:
         exc_file = exc.get("file", "")

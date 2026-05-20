@@ -34,7 +34,7 @@ from typing import Optional
 # Each component is an int or None (unknown).
 # ---------------------------------------------------------------------------
 
-DateTuple = tuple[Optional[int], Optional[int], Optional[int]]
+DateTuple = tuple[int | None, int | None, int | None]
 
 # ---------------------------------------------------------------------------
 # English month name → int map
@@ -92,17 +92,17 @@ _EN_YEAR_MONTH_DAY_RE = re.compile(r"^(\d{4})\s+([A-Za-z]+)\s+(\d{1,2})$")
 # ---------------------------------------------------------------------------
 
 
-def _clamp_month(m: int) -> Optional[int]:
+def _clamp_month(m: int) -> int | None:
     """Return month if in 1-12 range, else None."""
     return m if 1 <= m <= 12 else None
 
 
-def _clamp_day(d: int) -> Optional[int]:
+def _clamp_day(d: int) -> int | None:
     """Return day if in 1-31 range, else None."""
     return d if 1 <= d <= 31 else None
 
 
-def _try_json_struct(value: str) -> Optional[DateTuple]:
+def _try_json_struct(value: str) -> DateTuple | None:
     """Parse JSON struct: {"year": Y, "month": M, "day": D}."""
     try:
         obj = json.loads(value)
@@ -121,7 +121,7 @@ def _try_json_struct(value: str) -> Optional[DateTuple]:
     return (year, month, day)
 
 
-def _try_iso_slash_dot(value: str) -> Optional[DateTuple]:
+def _try_iso_slash_dot(value: str) -> DateTuple | None:
     """Parse ISO / slash / dot variants, including XX-placeholder forms."""
     s = value.strip()
 
@@ -156,7 +156,7 @@ def _try_iso_slash_dot(value: str) -> Optional[DateTuple]:
     return None
 
 
-def _try_english(value: str) -> Optional[DateTuple]:
+def _try_english(value: str) -> DateTuple | None:
     """Parse English month-name formats."""
     s = value.strip()
 
@@ -188,7 +188,7 @@ def _try_english(value: str) -> Optional[DateTuple]:
 # ---------------------------------------------------------------------------
 
 
-def parse_date(value: str | None) -> Optional[DateTuple]:
+def parse_date(value: str | None) -> DateTuple | None:
     """Parse a date string into a (year, month, day) tuple.
 
     Args:
@@ -249,7 +249,7 @@ def to_iso8601(parsed: DateTuple) -> str:
 # ---------------------------------------------------------------------------
 
 
-def normalize_date(value: str | None) -> Optional[str]:
+def normalize_date(value: str | None) -> str | None:
     """Parse and re-serialize a date string to ISO 8601 with XX placeholders.
 
     Convenience wrapper combining parse_date + to_iso8601.
@@ -329,7 +329,7 @@ def is_date_subset_compatible(a: str | None, b: str | None) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def pick_most_precise_date(values: list[str | None]) -> Optional[str]:
+def pick_most_precise_date(values: list[str | None]) -> str | None:
     """From a list of date strings, return the ISO 8601 form of the most precise.
 
     "Most precise" = highest precision_score (year+month+day > year+month > year).
@@ -342,7 +342,7 @@ def pick_most_precise_date(values: list[str | None]) -> Optional[str]:
     Returns:
         ISO 8601 string of the most precise date, or None if all unparseable.
     """
-    best_parsed: Optional[DateTuple] = None
+    best_parsed: DateTuple | None = None
     best_score = -1
 
     for v in values:

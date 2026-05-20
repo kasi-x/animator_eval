@@ -44,7 +44,7 @@ class PlaywrightFetcher:
         self._context: BrowserContext | None = None
         self._browser = None  # only used for CDP mode
 
-    async def __aenter__(self) -> "PlaywrightFetcher":
+    async def __aenter__(self) -> PlaywrightFetcher:
         from playwright.async_api import async_playwright
 
         self._pw = await async_playwright().start()

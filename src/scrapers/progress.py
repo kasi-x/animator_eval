@@ -28,7 +28,8 @@ from __future__ import annotations
 import os
 import sys
 from contextlib import contextmanager
-from typing import Any, Iterator, Protocol
+from typing import Any, Protocol
+from collections.abc import Iterator
 
 import structlog
 

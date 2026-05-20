@@ -35,8 +35,8 @@ async def download_image(
     client: httpx.AsyncClient,
     url: str,
     save_dir: Path,
-    filename: Optional[str] = None,
-) -> Optional[str]:
+    filename: str | None = None,
+) -> str | None:
     """Download and save an image (with retry + content validation).
 
     Args:
@@ -137,7 +137,7 @@ async def download_image(
 async def download_person_images(
     persons: list[tuple[str, str, str]],  # [(person_id, image_large, image_medium)]
     show_progress: bool = True,
-) -> dict[str, dict[str, Optional[str]]]:
+) -> dict[str, dict[str, str | None]]:
     """Batch download person images.
 
     Args:
@@ -222,7 +222,7 @@ async def download_anime_images(
         tuple[str, str, str, str]
     ],  # [(anime_id, cover_large, cover_extra_large, banner)]
     show_progress: bool = True,
-) -> dict[str, dict[str, Optional[str]]]:
+) -> dict[str, dict[str, str | None]]:
     """Batch download anime work images.
 
     Args:

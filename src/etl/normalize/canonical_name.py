@@ -202,7 +202,7 @@ KYU_SHIN_MAP: dict[str, str] = {
 }
 
 
-def canonical_name_ja(name: Optional[str]) -> Optional[str]:
+def canonical_name_ja(name: str | None) -> str | None:
     """Return NFKC-normalized + 旧字体→新字体変換 + whitespace-collapsed name.
 
     Args:

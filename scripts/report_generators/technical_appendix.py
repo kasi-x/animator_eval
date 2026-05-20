@@ -91,12 +91,12 @@ class TechnicalReport:
         }
     
     @staticmethod
-    def load_from_json(file_path: str) -> Optional[dict]:
+    def load_from_json(file_path: str) -> dict | None:
         """Load report data from JSON file."""
         try:
             path = Path(file_path)
             if path.exists():
-                with open(path, "r") as f:
+                with open(path) as f:
                     return json.load(f)
         except Exception as e:
             log.exception("report_load_error", file=file_path, error=str(e))
@@ -208,7 +208,7 @@ class TechnicalAppendix:
         appendix = TechnicalAppendix()
         
         try:
-            with open(catalog_path, "r") as f:
+            with open(catalog_path) as f:
                 catalog = json.load(f)
             
             for report_spec in catalog.get("reports", []):

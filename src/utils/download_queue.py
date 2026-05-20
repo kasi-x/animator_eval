@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 from dataclasses import dataclass, asdict
-from typing import List
 import structlog
 
 log = structlog.get_logger()
@@ -37,7 +36,7 @@ class DownloadQueue:
 
         self.queue_file = queue_file
         self.queue_file.parent.mkdir(parents=True, exist_ok=True)
-        self.items: List[DownloadItem] = []
+        self.items: list[DownloadItem] = []
 
         # Load existing queue from file
         self._load_from_file()
@@ -129,7 +128,7 @@ class DownloadQueue:
         self.items = [item for item in self.items if item.item_id != item_id]
         self._save_to_file()
 
-    def get_all_items(self) -> List[DownloadItem]:
+    def get_all_items(self) -> list[DownloadItem]:
         """Get all queued items.
 
         Returns:
@@ -158,7 +157,7 @@ class DownloadQueue:
         """
         return len(self.items) == 0
 
-    def get_persons(self) -> List[DownloadItem]:
+    def get_persons(self) -> list[DownloadItem]:
         """Get all person download items.
 
         Returns:
@@ -166,7 +165,7 @@ class DownloadQueue:
         """
         return [item for item in self.items if item.item_type == "person"]
 
-    def get_anime(self) -> List[DownloadItem]:
+    def get_anime(self) -> list[DownloadItem]:
         """Get all anime download items.
 
         Returns:

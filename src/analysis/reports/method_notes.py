@@ -17,17 +17,17 @@ class MethodMetadata:
     audience: str
     source_silver_tables: list[str]
     formula_version: str
-    ci_method: Optional[str]
-    null_model: Optional[str]
-    holdout_method: Optional[str]
-    row_count: Optional[int]
-    notes: Optional[str]
-    inputs_hash: Optional[str]
+    ci_method: str | None
+    null_model: str | None
+    holdout_method: str | None
+    row_count: int | None
+    notes: str | None
+    inputs_hash: str | None
 
 
 def load_method_metadata(
     conn: duckdb.DuckDBPyConnection, table_name: str
-) -> Optional[MethodMetadata]:
+) -> MethodMetadata | None:
     """Load method metadata for a report from meta_lineage.
 
     Args:

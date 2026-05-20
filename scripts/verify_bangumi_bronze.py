@@ -405,7 +405,7 @@ def main(
         help="Root directory for BRONZE parquet partitions",
         exists=False,  # allow non-existent for graceful error
     ),
-    json_out: Optional[Path] = typer.Option(
+    json_out: Path | None = typer.Option(
         None,
         "--json-out",
         help="Write JSON report to this path (omit to print to stdout only)",

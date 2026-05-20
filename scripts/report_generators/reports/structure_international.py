@@ -199,7 +199,7 @@ class StructureInternationalReport(BaseReportGenerator):
     # Coverage note
     # ------------------------------------------------------------------
 
-    def _build_coverage_note(self, result: "InternationalCollabResult") -> str:
+    def _build_coverage_note(self, result: InternationalCollabResult) -> str:
         warning = ""
         if result.low_coverage_warning:
             warning = (
@@ -221,7 +221,7 @@ class StructureInternationalReport(BaseReportGenerator):
     # Overview
     # ------------------------------------------------------------------
 
-    def _build_overview(self, result: "InternationalCollabResult") -> str:
+    def _build_overview(self, result: InternationalCollabResult) -> str:
         n_ratio_years = len({r.year for r in result.yearly_ratios})
         n_pairs_with_data = len({d.pair for d in result.pair_densities if d.n_anime > 0})
         n_communities = len(result.communities)
@@ -252,7 +252,7 @@ class StructureInternationalReport(BaseReportGenerator):
     def _build_yearly_ratio_section(
         self,
         sb: SectionBuilder,
-        result: "InternationalCollabResult",
+        result: InternationalCollabResult,
         coverage_note: str,
     ) -> ReportSection:
 
@@ -383,7 +383,7 @@ class StructureInternationalReport(BaseReportGenerator):
     def _build_pair_density_section(
         self,
         sb: SectionBuilder,
-        result: "InternationalCollabResult",
+        result: InternationalCollabResult,
         coverage_note: str,
     ) -> ReportSection:
         densities = result.pair_densities
@@ -505,7 +505,7 @@ class StructureInternationalReport(BaseReportGenerator):
     def _build_role_progression_section(
         self,
         sb: SectionBuilder,
-        result: "InternationalCollabResult",
+        result: InternationalCollabResult,
         coverage_note: str,
     ) -> ReportSection:
         progressions = result.role_progressions
@@ -618,7 +618,7 @@ class StructureInternationalReport(BaseReportGenerator):
     def _build_community_section(
         self,
         sb: SectionBuilder,
-        result: "InternationalCollabResult",
+        result: InternationalCollabResult,
         coverage_note: str,
     ) -> ReportSection:
         communities = result.communities
@@ -736,7 +736,7 @@ class StructureInternationalReport(BaseReportGenerator):
     # Interpretation
     # ------------------------------------------------------------------
 
-    def _build_interpretation(self, result: "InternationalCollabResult") -> str:
+    def _build_interpretation(self, result: InternationalCollabResult) -> str:
         lines: list[str] = []
 
         # Ratio trend
@@ -825,7 +825,7 @@ _GLOSSARY: dict[str, str] = {
 
 
 # v3 minimal SPEC
-from .._spec import make_default_spec  # noqa: E402
+from .._spec import SensitivityAxis, make_default_spec  # noqa: E402
 
 SPEC = make_default_spec(
     name="structure_international",
@@ -839,6 +839,9 @@ SPEC = make_default_spec(
         "国籍解決: country_of_origin (high) → name_zh-ko (medium) → unknown (low)。"
         "credits データが production year を正確に反映している (漏れバイアスあり)。"
         "CJK 名寄せ: 19-02 cluster fix 適用済。"
+        "海外スタジオ credit は ANN/AniList で under-credited な構造的 bias を持ち、"
+        "edge 密度の絶対水準は overall coverage に依存。trends interpretation には "
+        "source 別 sub-cohort で robust 性確認が必要。"
     ),
     null_model=["N2", "N3"],
     sources=["credits", "persons", "anime"],
@@ -846,9 +849,19 @@ SPEC = make_default_spec(
     estimator="Louvain + permutation test (group-label shuffle)",
     ci_estimator="analytical_se",
     n_resamples=None,
+    sensitivity_grid=[
+        SensitivityAxis(name="nationality_resolution_tier", values=["country_only", "country+cjk_name", "country+cjk+unknown_drop"]),
+        SensitivityAxis(name="louvain_resolution", values=[0.8, 1.0, 1.5]),
+        SensitivityAxis(name="time_window", values=["2000-2010", "2010-2020", "2020-2024"]),
+    ],
     extra_limitations=[
         "credits 漏れバイアス: 海外スタジオは ANN/AniList で under-credited",
         "CJK 名表記ゆれによる過小推定リスク (19-02 cluster fix 済だが残存可能性あり)",
         "null 値 country_of_origin が多い場合、海外比率は下方バイアス",
     ],
+    alternative_interpretations=(
+        "cross-border edge 増は実際の国際協業ではなく特定 source (AniList) の coverage 拡大を反映している可能性。source 別 sub-graph で再検証要。",
+        "Louvain で検出された cross-border cluster は CJK 名寄せ失敗 (1 人を複数国籍に分割) の artifact である可能性。entity resolution Tier 1-4 限定で再走推奨。",
+        "permutation null 棄却は group-label shuffle の前提が破れた場合 (国籍構成が時間に依存) でも生じ得る。年代別 stratified permutation で再評価する必要がある。",
+    ),
 )

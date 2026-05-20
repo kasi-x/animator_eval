@@ -73,7 +73,7 @@ def _read_csv(path: str | Path) -> list[dict[str, Any]]:
                 continue
             break  # first non-comment line is the header
         fh.seek(0)
-        reader = csv.DictReader((line for line in fh if not line.startswith("#")))
+        reader = csv.DictReader(line for line in fh if not line.startswith("#"))
         rows = list(reader)
     return rows
 
