@@ -33,7 +33,7 @@ log = structlog.get_logger(__name__)
 
 
 _MIN_GRAPH_NODES = 100  # below this, report skips computation
-_DEFAULT_K_REMOVALS = 50  # cap simulation to first 50 removals for speed
+_DEFAULT_K_REMOVALS = 20  # cap simulation; large graph では時間優先で短くする
 
 
 _SAMPLE_TOP_N_PERSONS = 5000  # graph 構築用 person sample 上限
@@ -157,8 +157,14 @@ class NetworkResilienceReport(BaseReportGenerator):
         # Build resilience curves (LCC ratio over removal step)
         rand_order = removal_order_random(g, rng_seed=42, k=k)
         deg_order = removal_order_by_degree(g, k=k)
-        rand_curve = simulate_resilience(g, rand_order, strategy_name="random")
-        deg_curve = simulate_resilience(g, deg_order, strategy_name="degree")
+        # 実 graph 大規模時は metric_authority=False (eigenvector centrality 計算スキップ)
+        large = g.number_of_edges() > 100_000
+        rand_curve = simulate_resilience(
+            g, rand_order, strategy_name="random", metric_authority=not large,
+        )
+        deg_curve = simulate_resilience(
+            g, deg_order, strategy_name="degree", metric_authority=not large,
+        )
 
         # Critical persons (top 10 by single-node pair_connectivity drop)
         # Limit candidates to degree-top 200 for speed
