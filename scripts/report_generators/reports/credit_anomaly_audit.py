@@ -30,11 +30,31 @@ log = structlog.get_logger(__name__)
 _MAX_DISPLAY = 30
 
 
+_MIN_CREDITS_FOR_AUDIT = 10
+_MAX_AUDIT_PERSONS = 50000  # safety cap
+
+
 def _query_credit_counts(conn: Any) -> dict[str, int]:
-    """Per-person credit count (latest snapshot, all periods)."""
+    """Per-person credit count (filtered: >= _MIN_CREDITS_FOR_AUDIT)."""
     queries = [
-        "SELECT person_id, COUNT(*) AS n FROM credits GROUP BY person_id",
-        "SELECT person_id, COUNT(*) AS n FROM conformed.credits GROUP BY person_id",
+        f"""
+        SELECT person_id, COUNT(*) AS n
+        FROM credits
+        WHERE person_id IS NOT NULL
+        GROUP BY person_id
+        HAVING COUNT(*) >= {_MIN_CREDITS_FOR_AUDIT}
+        ORDER BY n DESC
+        LIMIT {_MAX_AUDIT_PERSONS}
+        """,
+        f"""
+        SELECT person_id, COUNT(*) AS n
+        FROM conformed.credits
+        WHERE person_id IS NOT NULL
+        GROUP BY person_id
+        HAVING COUNT(*) >= {_MIN_CREDITS_FOR_AUDIT}
+        ORDER BY n DESC
+        LIMIT {_MAX_AUDIT_PERSONS}
+        """,
     ]
     for sql in queries:
         try:
@@ -45,11 +65,26 @@ def _query_credit_counts(conn: Any) -> dict[str, int]:
     return {}
 
 
-def _query_role_distribution(conn: Any) -> dict[str, dict[str, int]]:
-    """person_id × role → count."""
+def _query_role_distribution(conn: Any, person_ids: list[str]) -> dict[str, dict[str, int]]:
+    """person_id × role → count (filtered by person_ids subset for speed)."""
+    if not person_ids:
+        return {}
+    # DuckDB IN list cap (派手な数を避ける)
+    person_ids = person_ids[:5000]
+    ids_csv = ",".join("'" + p.replace("'", "''") + "'" for p in person_ids)
     queries = [
-        "SELECT person_id, role, COUNT(*) AS n FROM credits GROUP BY 1, 2",
-        "SELECT person_id, role, COUNT(*) AS n FROM conformed.credits GROUP BY 1, 2",
+        f"""
+        SELECT person_id, role, COUNT(*) AS n
+        FROM credits
+        WHERE person_id IN ({ids_csv}) AND role IS NOT NULL
+        GROUP BY 1, 2
+        """,
+        f"""
+        SELECT person_id, role, COUNT(*) AS n
+        FROM conformed.credits
+        WHERE person_id IN ({ids_csv}) AND role IS NOT NULL
+        GROUP BY 1, 2
+        """,
     ]
     for sql in queries:
         try:
@@ -64,23 +99,24 @@ def _query_role_distribution(conn: Any) -> dict[str, dict[str, int]]:
     return {}
 
 
-def _query_source_counts(conn: Any) -> dict[str, dict[str, int]]:
-    """canonical_id × source → count via persons.source_ids_json proxy.
-
-    簡易: credits.evidence_source ごとに person 単位で集計。
-    """
+def _query_source_counts(conn: Any, person_ids: list[str]) -> dict[str, dict[str, int]]:
+    """canonical_id × source → count (filtered)."""
+    if not person_ids:
+        return {}
+    person_ids = person_ids[:5000]
+    ids_csv = ",".join("'" + p.replace("'", "''") + "'" for p in person_ids)
     queries = [
-        """
+        f"""
         SELECT person_id, evidence_source, COUNT(*)
         FROM credits
-        WHERE person_id IS NOT NULL AND evidence_source IS NOT NULL
-        GROUP BY person_id, evidence_source
+        WHERE person_id IN ({ids_csv}) AND evidence_source IS NOT NULL
+        GROUP BY 1, 2
         """,
-        """
+        f"""
         SELECT person_id, evidence_source, COUNT(*)
         FROM conformed.credits
-        WHERE person_id IS NOT NULL AND evidence_source IS NOT NULL
-        GROUP BY person_id, evidence_source
+        WHERE person_id IN ({ids_csv}) AND evidence_source IS NOT NULL
+        GROUP BY 1, 2
         """,
     ]
     for sql in queries:
@@ -108,10 +144,11 @@ class CreditAnomalyAuditReport(BaseReportGenerator):
     filename = "credit_anomaly_audit.html"
 
     def generate(self) -> Path | None:
-        # 1. Load
+        # 1. Load (top-N by credit count for speed)
         credit_counts = _query_credit_counts(self.conn)
-        role_dist = _query_role_distribution(self.conn)
-        source_counts = _query_source_counts(self.conn)
+        top_persons = list(credit_counts.keys())
+        role_dist = _query_role_distribution(self.conn, top_persons)
+        source_counts = _query_source_counts(self.conn, top_persons)
 
         # 2. Detect (with conservative thresholds for safety)
         poisson_outs = detect_poisson_outliers(
