@@ -90,6 +90,8 @@ from .equity_oaxaca import EquityOaxacaReport
 # Session 2026-05-20: 高度化レポート群
 from .network_resilience import NetworkResilienceReport
 from .cohort_inequality import CohortInequalityReport
+from .mentor_effect import MentorEffectReport
+from .credit_anomaly_audit import CreditAnomalyAuditReport
 
 #: All v2 report classes, in generation order
 #:
@@ -156,6 +158,8 @@ V2_REPORT_CLASSES = [
     EquityOaxacaReport,
     NetworkResilienceReport,
     CohortInequalityReport,
+    MentorEffectReport,
+    CreditAnomalyAuditReport,
 ]
 
 __all__ = [
@@ -212,5 +216,7 @@ __all__ = [
     "EquityOaxacaReport",
     "NetworkResilienceReport",
     "CohortInequalityReport",
+    "MentorEffectReport",
+    "CreditAnomalyAuditReport",
     "V2_REPORT_CLASSES",
 ]

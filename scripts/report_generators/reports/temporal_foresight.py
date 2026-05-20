@@ -104,8 +104,8 @@ class TemporalForesightReport(BaseReportGenerator):
                 "本セクションは活動パターン記述のプレースホルダーとして機能する。"
             ),
             interpretation_html=(
-                "<p>v2 Section 3.3に基づき、時間的分離のない個人のキャリア軌跡に関する"
-                "前向き予測的主張は禁止されている。"
+                "<p>本稿の解釈: v2 Section 3.3に基づき、時間的分離のない個人のキャリア軌跡に関する"
+                "前向き予測的主張は禁止されていると考えられる。"
                 "ここに示す相関は回顧的な記述であり、activity_ratio は n_credits と"
                 "同じ時間窓から算出されているため、循環的である。"
                 "真の前向き検証には、activity_ratio の算出時期と n_credits の観測時期を "

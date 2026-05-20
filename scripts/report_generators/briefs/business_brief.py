@@ -155,6 +155,27 @@ def generate_business_brief() -> dict:
         interpretation=None,
     )
 
+    # ─── Executive Summary auto-inject (Session 2 後半) ──────────────
+    from scripts.report_generators.briefs.executive_summary import (
+        build_executive_summary,
+        render_executive_summary_html,
+    )
+    _exec_summary = build_executive_summary(
+        brief_id="business",
+        audience="investors / studio strategy",
+        findings=[],
+    )
+    brief.add_section(
+        section_id="executive_summary",
+        title="Executive Summary (auto-generated)",
+        findings=render_executive_summary_html(_exec_summary),
+        interpretation=(
+            "本稿の解釈: 本 Executive Summary は KeyFinding extract template。"
+            "pipeline 後段で whitespace HHI / IV decomp / O8 soft power 等を "
+            "KeyFinding として挿入する設計と考えられる。"
+        ),
+    )
+
     brief.add_section(
         section_id="market_structure",
         title="Production Market Structure: Genre Frequency Distribution",

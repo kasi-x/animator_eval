@@ -252,10 +252,19 @@ class BaseReportGenerator(ABC):
         # Build mandatory coverage caveat block (27_methodology/01_missingness_disclosure)
         cov_block = _build_coverage_block_html(coverage_matrix)
 
+        # Append cross-reference block (Session 2 後半: report 連鎖性)
+        try:
+            from ..cross_reference import build_cross_reference_block
+            xref_html = build_cross_reference_block(self.name)
+        except Exception as exc:
+            log.debug("cross_ref_build_failed", report=self.name, error=str(exc))
+            xref_html = ""
+        body_with_xref = body + xref_html if xref_html else body
+
         html = wrap_html_v2(
             title=self.title,
             subtitle=self.subtitle,
-            body=body,
+            body=body_with_xref,
             doc_type=self.doc_type,
             intro_html=intro_html,
             glossary_terms=terms,

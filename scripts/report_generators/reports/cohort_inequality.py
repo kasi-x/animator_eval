@@ -174,3 +174,37 @@ class CohortInequalityReport(BaseReportGenerator):
         )
         body = self.builder.build_section(section)
         return self.write_report(body)
+
+
+# ---------------------------------------------------------------------------
+# v3 SPEC
+# ---------------------------------------------------------------------------
+from .._spec import make_default_spec  # noqa: E402
+
+SPEC = make_default_spec(
+    name="cohort_inequality",
+    audience="hr",
+    claim=(
+        "5 年 cohort 別の credit 機会量 (log(1 + total_credits)) について "
+        "Gini / Theil-T / Atkinson(ε=0.5) を計算し、最古 cohort と最新 cohort の "
+        "Gini 差分の CI が 0 を跨ぐ場合は区別不能、跨がない場合は構造的格差の "
+        "拡大 (差分 > 0) / 縮小 (< 0) の signal とする。"
+    ),
+    identifying_assumption=(
+        "min_cohort_n = 30 未満は推定不安定として除外。bin_width = 5 年。"
+        "credit count は機会量 proxy (role / scale weight 捨象)。"
+        "生存者バイアス (短寿命 person ほど credit 少) と累積途上効果 "
+        "(若年 cohort ほど total_credits 薄い) を解釈の caveat として明示。"
+    ),
+    null_model=["bootstrap percentile CI (n=1000) で cohort 内置換"],
+    sources=["feat_career"],
+    meta_table="meta_cohort_inequality",
+    estimator="Gini / Theil-T / Atkinson(0.5) 3 指標併設",
+    ci_estimator="bootstrap", n_resamples=1000,
+    extra_limitations=[
+        "credit count = 1 単位の単純化 (role weight × episode 捨象)",
+        "生存者バイアス: 短寿命 person は Gini を下方押し下げ",
+        "累積途上: 近年 cohort は活動年数浅く total_credits 累積途上",
+        "cohort × gender / studio の交差は別 cut で別途",
+    ],
+)

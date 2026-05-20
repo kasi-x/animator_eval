@@ -190,3 +190,36 @@ class NetworkResilienceReport(BaseReportGenerator):
         )
         body = self.builder.build_section(section)
         return self.write_report(body)
+
+
+# ---------------------------------------------------------------------------
+# v3 SPEC
+# ---------------------------------------------------------------------------
+from .._spec import make_default_spec  # noqa: E402
+
+SPEC = make_default_spec(
+    name="network_resilience",
+    audience="policy",
+    claim=(
+        "collaboration graph の hub / bridge person を順次除去する simulation で、"
+        "fragility_ratio = 1 - degree_auc / random_auc を構造的脆弱性指標として "
+        "公開する。high fragility (> 0.3) の場合、bridge person の離職リスクが "
+        "業界全体の collaboration 持続性に影響することを警告する。"
+    ),
+    identifying_assumption=(
+        "co-credit edges は協業関係を測る構造的代理。per-anime cap 80 persons で"
+        "O(n²) 爆発回避。bridge_score は src/analysis/network/bridges.py 出力前提。"
+        "entity resolution 信頼性 (19/01 / 35/01 完了) に依存。"
+    ),
+    null_model=["random removal baseline (rng_seed-fixed)"],
+    sources=["credits", "persons"],
+    meta_table="meta_network_resilience",
+    estimator="trapezoidal AUC over LCC / PCC / authority ratio curve",
+    ci_estimator="bootstrap", n_resamples=200,  # k_removals scaling
+    extra_limitations=[
+        "co-credit edge は friendship を意味しない",
+        "long-running series の per-anime cap で truncation",
+        "eigenvector_centrality 収束失敗時 graceful 0 fallback",
+        "critical person flag は構造的観察、個人評価ではない",
+    ],
+)

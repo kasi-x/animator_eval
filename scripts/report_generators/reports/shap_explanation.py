@@ -94,10 +94,10 @@ class SHAPExplanationReport(BaseReportGenerator):
                 "it does not imply causal relevance of features."
             ),
             interpretation_html=(
-                "<p>SHAP重要度は本予測モデルへの寄与度で特徴量をランク付けする。"
-                "SHAP重要度が高い特徴量は、他の特徴量を所与としたときに予測上有用であることを示すが、"
+                "<p>本稿の解釈: SHAP重要度は本予測モデルへの寄与度で特徴量をランク付けする。"
+                "SHAP重要度が高い特徴量は、他の特徴量を所与としたときに予測上有用であると考えられるが、"
                 "因果的に重要とは限らない。"
-                "代替的な分析として、因果的文脈（例: 因果グラフ）でShapley値を用いる方法があり、"
+                "代替解釈として、因果的文脈（例: 因果グラフ）でShapley値を用いる方法があり、"
                 "ML-SHAP値とは異なる結果となる。</p>"
             ),
             section_id="shap_importance",

@@ -158,6 +158,7 @@ class CausalStudioTransferReport(BaseReportGenerator):
                 self._build_did_estimates_section(sb, did_result),
                 self._build_event_study_section(sb, did_result),
                 self._build_parallel_trends_section(sb, did_result),
+                self._build_hte_section(sb),
             ],
             overview_html=overview_html,
             interpretation_html=interpretation_html,
@@ -498,6 +499,70 @@ class CausalStudioTransferReport(BaseReportGenerator):
                 "DiD estimates require caution (consider synthetic control)."
             ),
         )
+
+    # ── Section 5: HTE (heterogeneous treatment effect by subgroup) ──────────
+
+    def _build_hte_section(self, sb: SectionBuilder) -> ReportSection:
+        """Subgroup CATE 表示。pipeline で feat_did_hte が生成されていれば描画、
+        無ければ skeleton + 設計開示。"""
+        rows = self._load_hte_rows()
+        if not rows:
+            findings = (
+                "<p>HTE section: subgroup CATE / T-learner 結果は本データ範囲では"
+                "未生成 (feat_did_hte 未投入)。pipeline post_processing が HTE を"
+                "計算するまでは ATE のみ表示する。</p>"
+                "<p>本 section は src/analysis/causal/heterogeneous_effects.py の "
+                "interaction-term DiD で cohort_decade × gender × studio_tier の "
+                "subgroup CATE を可視化する設計枠組み。homogeneity F-test の p-value "
+                "で「treatment 効果が subgroup 間で有意に異なるか」を判定する。</p>"
+            )
+            method_note = (
+                "interaction-term spec: y = α + β·treated + Σ_s γ_s·sub_s + "
+                "Σ_s δ_s·(treated × sub_s) + ε。HC0 SE で per-subgroup CATE = β + δ_s "
+                "を構成。homogeneity F-test (`scipy.stats.f`) は δ_s 全て 0 の H0 を検定する。"
+                "T-learner (Künzel 2019) は Random Forest で個体 CATE を non-parametric "
+                "推定し、heterogeneity driver feature を variance proxy で抽出する。"
+            )
+            return ReportSection(
+                title="HTE: subgroup CATE 分解 (設計枠組み)",
+                findings_html=findings,
+                method_note=method_note,
+                section_id="hte_subgroup",
+            )
+
+        # Render rows
+        body_rows = "".join(
+            f"<tr><td>{r[0]}</td><td>{r[1]:+.4f}</td>"
+            f"<td>[{r[2]:+.4f}, {r[3]:+.4f}]</td><td>{r[4]:,}</td></tr>"
+            for r in rows
+        )
+        findings = (
+            "<p>subgroup × outcome の CATE table:</p>"
+            "<table><thead><tr><th>subgroup</th><th>CATE</th>"
+            "<th>95% CI</th><th>n</th></tr></thead>"
+            f"<tbody>{body_rows}</tbody></table>"
+        )
+        return ReportSection(
+            title="HTE: subgroup CATE 分解",
+            findings_html=findings,
+            method_note=(
+                "interaction-term DiD + HC0 SE。homogeneity F-test で subgroup 間有意差検定。"
+                "ATE の単純平均と一致しない場合、heterogeneity driver の探索を推奨。"
+            ),
+            section_id="hte_subgroup",
+        )
+
+    def _load_hte_rows(self) -> list:
+        """Load HTE subgroup × outcome rows (feat_did_hte)。"""
+        try:
+            return self.conn.execute("""
+                SELECT subgroup_label, cate, ci_lower, ci_upper, n_obs
+                FROM feat_did_hte
+                WHERE cate IS NOT NULL
+                ORDER BY subgroup_label
+            """).fetchall()
+        except Exception:
+            return []
 
     # ── Glossary ──────────────────────────────────────────────────────────────
 

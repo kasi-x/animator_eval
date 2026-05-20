@@ -150,6 +150,27 @@ def generate_hr_brief() -> dict:
         interpretation=None,
     )
 
+    # ─── Executive Summary auto-inject (Session 2 後半) ──────────────
+    from scripts.report_generators.briefs.executive_summary import (
+        build_executive_summary,
+        render_executive_summary_html,
+    )
+    _exec_summary = build_executive_summary(
+        brief_id="hr",
+        audience="workers / studio HR",
+        findings=[],
+    )
+    brief.add_section(
+        section_id="executive_summary",
+        title="Executive Summary (auto-generated)",
+        findings=render_executive_summary_html(_exec_summary),
+        interpretation=(
+            "本稿の解釈: 本 Executive Summary は KeyFinding extract template。"
+            "pipeline 後段で cohort Gini / visibility_loss AUC / mentor DiD 等を "
+            "KeyFinding として挿入する設計と考えられる。"
+        ),
+    )
+
     brief.add_section(
         section_id="structural_position",
         title="Your Structural Position in the Collaboration Network",

@@ -130,6 +130,28 @@ def generate_policy_brief() -> dict:
         interpretation=None,
     )
 
+    # ─── Executive Summary auto-inject (Session 2 後半) ──────────────
+    from scripts.report_generators.briefs.executive_summary import (
+        build_executive_summary,
+        render_executive_summary_html,
+    )
+    _exec_summary = build_executive_summary(
+        brief_id="policy",
+        audience="policymakers",
+        findings=[],  # pipeline 投入で KeyFinding 一覧化
+    )
+    brief.add_section(
+        section_id="executive_summary",
+        title="Executive Summary (auto-generated)",
+        findings=render_executive_summary_html(_exec_summary),
+        interpretation=(
+            "本稿の解釈: 本 Executive Summary は KeyFinding extract template。"
+            "pipeline の post_processing で各 method gate を通過した数値 (Oaxaca structural、"
+            "DiD ATE、fragility_ratio、coverage) を KeyFinding 化して挿入される設計と考えられる。"
+            "fact extraction + template で再現性確保、LLM narrative は不使用。"
+        ),
+    )
+
     brief.add_section(
         section_id="market_concentration",
         title="Labor Market Concentration in Animation",

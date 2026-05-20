@@ -278,9 +278,9 @@ class EquityOaxacaReport(BaseReportGenerator):
                     ),
                     visualization_html="",
                     interpretation_html=(
-                        "<p>本ファイル時点で gender 充足は分解実行水準に達していない。"
+                        "<p>本稿の解釈: 本ファイル時点で gender 充足は分解実行水準に達していない。"
                         "後続: TODO §12.1 (AniList orphan backfill) + §12.3 (MAL Card 05) で "
-                        "gender 充足 → 再走。</p>"
+                        "gender 充足 → 再走と考えられる。</p>"
                     ),
                 )
             )
@@ -326,3 +326,36 @@ class EquityOaxacaReport(BaseReportGenerator):
                 body, ["gender null 率が 30% を超過、解釈は探索的"]
             )
         return self.write_report(body)
+
+
+# ---------------------------------------------------------------------------
+# v3 SPEC
+# ---------------------------------------------------------------------------
+from .._spec import make_default_spec  # noqa: E402
+
+SPEC = make_default_spec(
+    name="equity_oaxaca",
+    audience="policy",
+    claim=(
+        "Oaxaca-Blinder 分解で、同等 theta_i / tenure / role_diversity 条件下の "
+        "gender 別 credit 機会量差が、endowment (構造的位置の差) と structural "
+        "(同位置の処遇差) に分離可能であり、bootstrap CI で structural 成分が "
+        "0 を跨がない場合に労働パイプライン公平性監査の根拠とする。"
+    ),
+    identifying_assumption=(
+        "gender NULL 除外 (現状 80.9% 除外、§15 enrichment 後に < 30% へ縮小)、"
+        "endowment と structural の分離は基準 group (male) の β を referent と"
+        "する Blinder (1973) 型。Cotton / Neumark 等の代替 referent との一貫性は別途確認要。"
+    ),
+    null_model=["bootstrap CI (n=1000, cluster=person, percentile)"],
+    sources=["persons", "credits", "feat_career", "person_scores"],
+    meta_table="meta_equity_oaxaca",
+    estimator="OLS β per group (HC0 SE) + bootstrap CI",
+    ci_estimator="bootstrap", n_resamples=1000,
+    extra_limitations=[
+        "gender 二値 (non-binary は別 cut)",
+        "credit count は機会量 proxy、role weight / anime scale 捨象",
+        "subgroup n < 100 で skeleton + 警告 mode",
+        "missing-at-random 仮定違反時、structural 成分が膨張する可能性",
+    ],
+)
