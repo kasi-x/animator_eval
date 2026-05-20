@@ -10,7 +10,6 @@ H2: 主観的評価 frame NG → "structural fragility"。
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +18,6 @@ import plotly.graph_objects as go
 import structlog
 
 from src.analysis.network.resilience import (
-    StrategyComparison,
     compare_strategies,
     find_critical_nodes,
     removal_order_by_degree,
@@ -38,26 +36,67 @@ _MIN_GRAPH_NODES = 100  # below this, report skips computation
 _DEFAULT_K_REMOVALS = 50  # cap simulation to first 50 removals for speed
 
 
+_SAMPLE_TOP_N_PERSONS = 5000  # graph 構築用 person sample 上限
+_PER_ANIME_CAP = 80
+_MIN_CREDITS_FOR_GRAPH = 5
+
+
 def _build_collaboration_graph_from_conn(conn: Any) -> nx.Graph:
-    """credit 共起から co-credit person graph を構築 (簡易版)。"""
-    queries = [
-        # main schema (resolved view)
-        """
-        SELECT person_id, anime_id FROM credits
-        WHERE person_id IS NOT NULL AND anime_id IS NOT NULL
+    """credit 共起から co-credit person graph を構築 (sample top-N)。
+
+    50 万 person 規模では O(n²) 爆発するため、上位 _SAMPLE_TOP_N_PERSONS のみで
+    construct する。これは sample-based fragility 推定であり、population-level
+    解釈は別途。
+    """
+    # Step 1: top-N persons by credit count
+    person_queries = [
+        f"""
+        SELECT person_id FROM credits
+        WHERE person_id IS NOT NULL
+        GROUP BY person_id
+        HAVING COUNT(*) >= {_MIN_CREDITS_FOR_GRAPH}
+        ORDER BY COUNT(*) DESC
+        LIMIT {_SAMPLE_TOP_N_PERSONS}
         """,
-        """
+        f"""
+        SELECT person_id FROM conformed.credits
+        WHERE person_id IS NOT NULL
+        GROUP BY person_id
+        HAVING COUNT(*) >= {_MIN_CREDITS_FOR_GRAPH}
+        ORDER BY COUNT(*) DESC
+        LIMIT {_SAMPLE_TOP_N_PERSONS}
+        """,
+    ]
+    top_persons: set[str] = set()
+    for sql in person_queries:
+        try:
+            rows = conn.execute(sql).fetchall()
+            top_persons = {r[0] for r in rows if r[0]}
+            break
+        except Exception as exc:
+            log.debug("graph_top_persons_attempt_failed", error=str(exc))
+    if not top_persons:
+        return nx.Graph()
+
+    # Step 2: co-credit edges within sample only
+    persons_csv = ",".join("'" + p.replace("'", "''") + "'" for p in top_persons)
+    edge_queries = [
+        f"""
+        SELECT person_id, anime_id FROM credits
+        WHERE person_id IN ({persons_csv}) AND anime_id IS NOT NULL
+        """,
+        f"""
         SELECT person_id, anime_id FROM conformed.credits
-        WHERE person_id IS NOT NULL AND anime_id IS NOT NULL
+        WHERE person_id IN ({persons_csv}) AND anime_id IS NOT NULL
         """,
     ]
     rows: list[tuple] = []
-    for sql in queries:
+    for sql in edge_queries:
         try:
             rows = conn.execute(sql).fetchall()
             break
         except Exception as exc:
-            log.debug("graph_query_attempt_failed", sql=sql[:60], error=str(exc))
+            log.debug("graph_edges_attempt_failed", error=str(exc))
     if not rows:
         return nx.Graph()
 
@@ -70,7 +109,7 @@ def _build_collaboration_graph_from_conn(conn: Any) -> nx.Graph:
     g = nx.Graph()
     for aid, persons in by_anime.items():
         persons = list(set(persons))
-        if len(persons) > 80:  # cap per-anime co-credit explosion
+        if len(persons) > _PER_ANIME_CAP:
             continue
         for i in range(len(persons)):
             for j in range(i + 1, len(persons)):

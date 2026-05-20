@@ -8,7 +8,6 @@ import pytest
 from src.analysis.causal.heterogeneous_effects import (
     HTEDecomposition,
     IndividualCATE,
-    SubgroupCATE,
     estimate_cate_by_subgroup,
     estimate_individual_cate_t_learner,
 )

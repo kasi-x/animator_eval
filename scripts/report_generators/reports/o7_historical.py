@@ -17,8 +17,7 @@ Method overview:
 
 from __future__ import annotations
 
-import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -313,7 +312,7 @@ class O7HistoricalRestorationReport(BaseReportGenerator):
             sb.build_section(self._build_sankey_section(sb, decade_breakdowns)),
         ]
 
-        interpretation_html = self._build_interpretation(decade_breakdowns, restored_rows)
+        self._build_interpretation(decade_breakdowns, restored_rows)
 
         return self.write_report(
             "\n".join(sections),

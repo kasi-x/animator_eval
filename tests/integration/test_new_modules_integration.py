@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import networkx as nx
 import numpy as np
-import pytest
 
 from scripts.report_generators.briefs.executive_summary import (
     KeyFinding,
@@ -26,7 +25,6 @@ from scripts.report_generators.briefs.executive_summary import (
     render_executive_summary_html,
 )
 from src.analysis.career.mentor_effect import (
-    MentorEventStudyRow,
     aggregate_mentor_effects,
     compute_pair_event_study,
 )
@@ -38,14 +36,12 @@ from src.analysis.causal.did_robustness import (
 from src.analysis.causal.heterogeneous_effects import estimate_cate_by_subgroup
 from src.analysis.equity.cohort_inequality import (
     bootstrap_inequality,
-    compute_cohort_trajectory,
     gini_coefficient,
 )
 from src.analysis.equity.oaxaca_decomp import decompose_subgroup
 from src.analysis.network.resilience import (
     compare_strategies,
     removal_order_by_attribute,
-    simulate_resilience,
 )
 from src.analysis.quality.credit_anomaly import (
     detect_poisson_outliers,
@@ -53,7 +49,6 @@ from src.analysis.quality.credit_anomaly import (
 )
 from src.analysis.quality.power_analysis import (
     audit_report_power,
-    power_t_test_two_sample,
 )
 
 
@@ -94,7 +89,7 @@ class TestCohortInequalityPower:
         rng = np.random.default_rng(7)
         # Cohort with mild inequality
         vals = rng.gamma(2.0, 2.0, 500)
-        ci = bootstrap_inequality(
+        bootstrap_inequality(
             vals, gini_coefficient, metric_name="gini",
             bootstrap_n=200, rng_seed=11,
         )

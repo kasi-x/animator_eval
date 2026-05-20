@@ -78,6 +78,18 @@ _MART_PK_MAP: dict[str, tuple[str, ...]] = {
     "ops_entity_resolution_audit": ("person_id",),
     "person_scores": ("person_id",),
     # score_history intentionally has no PK (append-only history log)
+    # Session 2 後半 additions
+    "feat_did_hte": ("subgroup_var", "subgroup_label", "outcome"),
+    "feat_mentor_pairs": ("mentor_id", "mentee_id"),
+    "feat_mentor_event_study": ("pair_id",),
+    "feat_credit_anomaly_flags": ("person_id", "detector", "flagged_at"),
+    "feat_did_robustness": ("outcome", "test_name"),
+    "feat_network_resilience": ("strategy", "metric"),
+    "feat_cohort_inequality": ("cohort_year", "bin_width"),
+    "feat_oaxaca_decomposition": (
+        "subgroup_var", "subgroup_a_label", "subgroup_b_label", "outcome",
+    ),
+    # feat_mentor_did_matched: single-row latest-wins, no real PK
 }
 
 
@@ -493,7 +505,7 @@ CREATE TABLE IF NOT EXISTS meta_report_spec (
 );
 
 -- Reproducibility snapshot for high-venue publication (§5.4 replication policy).
--- snapshot_policy=not_taken is the default; this table records exceptions.
+-- snapshot_policy=not_taken is the default — this table records exceptions.
 -- spec_hash: SHA-256 of the IV formula λ weights + pipeline version.
 -- score_hash: SHA-256 of the serialised person_scores rows at snapshot time.
 -- frozen scores survive λ recalibration — consumers must join on snapshot_id.
@@ -511,6 +523,128 @@ CREATE TABLE IF NOT EXISTS meta_score_frozen (
     score_rows_json TEXT NOT NULL DEFAULT '[]',
     frozen_at       TIMESTAMP NOT NULL DEFAULT current_timestamp,
     notes           TEXT NOT NULL DEFAULT ''
+);
+
+-- Session 2 後半: HTE / mentor / anomaly 用 feat テーブル DDL
+-- pipeline post_processing で書込、各 v2 report は SELECT で読む。
+
+CREATE TABLE IF NOT EXISTS feat_did_hte (
+    subgroup_var     VARCHAR NOT NULL,    -- 例: "cohort_decade", "gender"
+    subgroup_label   VARCHAR NOT NULL,    -- 例: "1990s", "female"
+    outcome          VARCHAR NOT NULL,    -- 例: "theta_i", "opportunity_residual"
+    cate             DOUBLE,
+    se               DOUBLE,
+    ci_lower         DOUBLE,
+    ci_upper         DOUBLE,
+    n_obs            INTEGER NOT NULL,
+    n_treated        INTEGER NOT NULL,
+    n_control        INTEGER NOT NULL,
+    homogeneity_p    DOUBLE,
+    updated_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (subgroup_var, subgroup_label, outcome)
+);
+
+CREATE TABLE IF NOT EXISTS feat_mentor_pairs (
+    mentor_id        VARCHAR NOT NULL,
+    mentee_id        VARCHAR NOT NULL,
+    first_anime_id   VARCHAR,
+    event_year       INTEGER,
+    n_shared_works   INTEGER NOT NULL DEFAULT 0,
+    confidence       DOUBLE,
+    updated_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (mentor_id, mentee_id)
+);
+
+CREATE TABLE IF NOT EXISTS feat_mentor_event_study (
+    pair_id          VARCHAR NOT NULL,    -- 'mentor_id|mentee_id'
+    mentor_id        VARCHAR NOT NULL,
+    mentee_id        VARCHAR NOT NULL,
+    event_year       INTEGER NOT NULL,
+    pre_theta_mean   DOUBLE,
+    post_theta_mean  DOUBLE,
+    delta            DOUBLE,
+    n_pre            INTEGER NOT NULL DEFAULT 0,
+    n_post           INTEGER NOT NULL DEFAULT 0,
+    updated_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (pair_id)
+);
+
+CREATE TABLE IF NOT EXISTS feat_mentor_did_matched (
+    n_treated        INTEGER NOT NULL,
+    n_control        INTEGER NOT NULL,
+    treated_delta_mean DOUBLE,
+    control_delta_mean DOUBLE,
+    did_estimate     DOUBLE,
+    ci_low           DOUBLE,
+    ci_high          DOUBLE,
+    bootstrap_n      INTEGER NOT NULL DEFAULT 500,
+    updated_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (updated_at)  -- 1 row per pipeline run, latest wins via timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_credit_anomaly_flags (
+    person_id        VARCHAR NOT NULL,
+    detector         VARCHAR NOT NULL,    -- "poisson" | "role_kl" | "source_disagree"
+    score            DOUBLE NOT NULL,     -- |z| or KL or spread_ratio
+    direction        VARCHAR,             -- "high" / "low" / null
+    n_credits        INTEGER,
+    extra_json       TEXT NOT NULL DEFAULT '{}',
+    flagged_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (person_id, detector, flagged_at)
+);
+
+CREATE TABLE IF NOT EXISTS feat_did_robustness (
+    outcome          VARCHAR NOT NULL,
+    test_name        VARCHAR NOT NULL,    -- "placebo" | "evalue" | "joint_leads"
+    statistic        DOUBLE,
+    p_value          DOUBLE,
+    passes           BOOLEAN,
+    extra_json       TEXT NOT NULL DEFAULT '{}',
+    updated_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (outcome, test_name)
+);
+
+CREATE TABLE IF NOT EXISTS feat_network_resilience (
+    strategy         VARCHAR NOT NULL,    -- "random" | "degree" | "bridge"
+    metric           VARCHAR NOT NULL,    -- "lcc" | "pcc" | "auth"
+    auc              DOUBLE,
+    relative_fragility DOUBLE,
+    n_nodes          INTEGER NOT NULL,
+    k_removals       INTEGER NOT NULL,
+    updated_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (strategy, metric)
+);
+
+CREATE TABLE IF NOT EXISTS feat_cohort_inequality (
+    cohort_year      INTEGER NOT NULL,    -- bin lower bound (e.g. 1990)
+    bin_width        INTEGER NOT NULL,
+    n_persons        INTEGER NOT NULL,
+    gini             DOUBLE,
+    theil_t          DOUBLE,
+    atkinson_0_5     DOUBLE,
+    mean_value       DOUBLE,
+    sd_value         DOUBLE,
+    updated_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (cohort_year, bin_width)
+);
+
+CREATE TABLE IF NOT EXISTS feat_oaxaca_decomposition (
+    subgroup_var     VARCHAR NOT NULL,    -- "gender" / "cohort" 等
+    subgroup_a_label VARCHAR NOT NULL,
+    subgroup_b_label VARCHAR NOT NULL,
+    outcome          VARCHAR NOT NULL,
+    raw_gap          DOUBLE,
+    endowment        DOUBLE,
+    structural       DOUBLE,
+    endowment_ci_low DOUBLE,
+    endowment_ci_high DOUBLE,
+    structural_ci_low DOUBLE,
+    structural_ci_high DOUBLE,
+    n_a              INTEGER NOT NULL,
+    n_b              INTEGER NOT NULL,
+    bootstrap_n      INTEGER NOT NULL DEFAULT 1000,
+    updated_at       TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (subgroup_var, subgroup_a_label, subgroup_b_label, outcome)
 );
 """
 

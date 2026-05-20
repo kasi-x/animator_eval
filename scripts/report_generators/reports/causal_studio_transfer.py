@@ -592,3 +592,40 @@ class CausalStudioTransferReport(BaseReportGenerator):
             "event_year": "スタジオ移籍が発生した年 (t=0)。",
             "primary_studio": "直近3年で最多クレジットのスタジオ (タイブレーク: 最新年)。",
         }
+
+
+# ---------------------------------------------------------------------------
+# v3 SPEC
+# ---------------------------------------------------------------------------
+from .._spec import make_default_spec  # noqa: E402
+
+SPEC = make_default_spec(
+    name="causal_studio_transfer",
+    audience="appendix",
+    claim=(
+        "person × year panel における studio transfer を処置とする DiD で、"
+        "theta_i / opportunity_residual / credit_count への ATE が 95% CI で "
+        "0 を跨がないこと、かつ parallel trends 仮定 (leads joint F-test p > 0.05) "
+        "を満たす場合に因果効果の証拠として採用する。"
+    ),
+    identifying_assumption=(
+        "parallel trends: potential outcome under no treatment が treated / control 群"
+        "で平行に推移。selection on observables (cohort × role) で観測可能 confounder を吸収。"
+        "unobserved confounder の sensitivity は E-value (did_robustness.py) で別途評価。"
+    ),
+    null_model=[
+        "leads (-3, -2, -1) joint Wald F-test for parallel trends",
+        "placebo: fake_event_year ± offset での DiD",
+        "E-value (VanderWeele & Ding 2017)",
+    ],
+    sources=["credits", "persons", "anime_studios", "feat_did_studio_transfer"],
+    meta_table="meta_did_studio_transfer",
+    estimator="2-way FE DiD + cluster-robust SE (person)",
+    ci_estimator="analytical", n_resamples=0,
+    extra_limitations=[
+        "Self-selection: 移籍者の事前 trajectory が control と乖離する可能性",
+        "Studio FE 変化と移籍効果の分離困難",
+        "Limited mobility bias (Andrews 2008): 単スタジオ person は推定除外",
+        "treatment timing 異質性 (rolling event) は static DiD では bias 可能性",
+    ],
+)

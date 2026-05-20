@@ -24,8 +24,7 @@ from typing import Any
 
 import structlog
 
-from ..helpers import build_disclaimer, build_stance_block
-from ..html_templates import REPORTS_DIR, wrap_html_v2
+from ..helpers import build_stance_block
 from ..section_builder import DataStatementParams, ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 

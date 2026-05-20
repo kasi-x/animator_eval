@@ -448,7 +448,7 @@ def compute_soft_power_index(
             platform_anime_map[pkey].add(p.anime_id)
 
     # Build: anime_id -> list of theta_proxy values
-    anime_theta: dict[str, list[float]] = defaultdict(list)
+    defaultdict(list)
     for pr in person_rows:
         if pr.is_international:
             # We need per-anime mapping — use person rows as aggregate
@@ -554,7 +554,7 @@ class O8SoftPowerReport(BaseReportGenerator):
             rng_seed=42,
         )
 
-        interpretation_html = self._build_interpretation(mw_result)
+        self._build_interpretation(mw_result)
 
         return self.write_report(
             "\n".join(sections),

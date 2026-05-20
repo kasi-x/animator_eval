@@ -13,8 +13,7 @@ Pre-condition: gender null < 30% (`§15` gender enrichment 完了後に動作)�
 
 from __future__ import annotations
 
-import sqlite3
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +25,7 @@ from src.analysis.equity.oaxaca_decomp import (
     decompose_subgroup,
 )
 
-from ..helpers import insert_lineage
-from ..section_builder import ReportSection, SectionBuilder
+from ..section_builder import ReportSection
 from ._base import BaseReportGenerator, append_validation_warnings
 
 log = structlog.get_logger(__name__)

@@ -6,9 +6,7 @@ import networkx as nx
 import pytest
 
 from src.analysis.network.resilience import (
-    CriticalNode,
     ResilienceCurve,
-    StrategyComparison,
     compare_strategies,
     find_critical_nodes,
     largest_connected_component_size,

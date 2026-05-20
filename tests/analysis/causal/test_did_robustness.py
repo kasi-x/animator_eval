@@ -7,7 +7,6 @@ import pytest
 
 from src.analysis.causal.did_robustness import (
     EValueResult,
-    JointLeadsResult,
     PlaceboResult,
     compute_e_value,
     e_value_from_continuous,
@@ -28,7 +27,6 @@ class TestPlaceboDid:
         rows = []
         for pid in range(n_persons):
             for y in years:
-                treated_pre = pid in treated_persons and y < real_event
                 treated_post = pid in treated_persons and y >= real_event
                 noise = rng.normal(0, 0.3)
                 if treated_post:

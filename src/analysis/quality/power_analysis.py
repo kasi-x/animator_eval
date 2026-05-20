@@ -25,10 +25,9 @@ References:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import asinh, sqrt
+from math import sqrt
 from typing import Literal
 
-import numpy as np
 import structlog
 
 log = structlog.get_logger(__name__)

@@ -1984,3 +1984,83 @@
 | `casting_tier` | `TEXT` | NULL | 'newcomer' |  |
 | `replacement_difficulty` | `REAL` | NULL | 0.0 |  |
 | `updated_at` | `TIMESTAMP` | NULL | CURRENT_TIMESTAMP |  |
+
+---
+
+## Session 2 後半: Mart 専用テーブル (DuckDB animetor.duckdb)
+
+これらは SQLModel schema.py 未登録の **DuckDB Mart 専用** テーブル。`src/analysis/io/mart_writer.py` の `_DDL` で直接定義され、pipeline post_processing から書込される。
+
+### `feat_did_hte`  (layer: feat)
+
+DiD ATE を subgroup × outcome で分解した CATE 推定。
+
+| column | type | nullable | default | description |
+|---|---|---|---|---|
+| `subgroup_var` | `VARCHAR` | NOT NULL |  | 分解軸 (e.g. "cohort_decade", "gender") |
+| `subgroup_label` | `VARCHAR` | NOT NULL |  | subgroup label (e.g. "1990s", "female") |
+| `outcome` | `VARCHAR` | NOT NULL |  | 結果変数 (theta_i / opportunity_residual / log_credit_count) |
+| `cate` | `DOUBLE` | NULL |  | conditional ATE point |
+| `se` | `DOUBLE` | NULL |  | HC0 SE |
+| `ci_lower` / `ci_upper` | `DOUBLE` | NULL |  | 95% CI |
+| `n_obs` | `INTEGER` | NOT NULL |  | subgroup obs 数 |
+| `n_treated` / `n_control` | `INTEGER` | NOT NULL |  |  |
+| `homogeneity_p` | `DOUBLE` | NULL |  | subgroup 間 CATE 異質性 F-test p |
+| `updated_at` | `TIMESTAMP` | NULL | CURRENT_TIMESTAMP |  |
+
+PK: (`subgroup_var`, `subgroup_label`, `outcome`)
+
+### `feat_mentor_pairs`
+
+`infer_mentorships()` の出力。pair 単位 metadata。
+
+| column | type | nullable | description |
+|---|---|---|---|
+| `mentor_id` / `mentee_id` | `VARCHAR` | NOT NULL | canonical person id |
+| `first_anime_id` | `VARCHAR` | NULL | 初共演 anime |
+| `event_year` | `INTEGER` | NULL | 初共演年 |
+| `n_shared_works` | `INTEGER` | NOT NULL | 共作品数 |
+| `confidence` | `DOUBLE` | NULL | mentorship 推定信頼度 |
+| `updated_at` | `TIMESTAMP` | NULL |  |
+
+PK: (`mentor_id`, `mentee_id`)
+
+### `feat_mentor_event_study`
+
+event-study 単位の pre/post Δθ。`mentor_effect.py` 出力。
+
+PK: (`pair_id` = 'mentor|mentee')
+
+### `feat_mentor_did_matched`
+
+非 mentor control 群との matched DiD aggregate row (latest-wins)。
+
+### `feat_credit_anomaly_flags`
+
+3 detector の review priority flag (PK: person_id × detector × flagged_at)。
+
+### `feat_did_robustness`
+
+DiD 補強検定 (placebo / E-value / joint_leads) の結果集約。PK: (outcome, test_name)。
+
+### `feat_network_resilience`
+
+removal-curve AUC + fragility_ratio。PK: (strategy, metric)。
+
+### `feat_cohort_inequality`
+
+cohort × bin_width 別の 3 不平等指標時系列。PK: (cohort_year, bin_width)。
+
+### `feat_oaxaca_decomposition`
+
+機会差の endowment / structural 分解。PK: (subgroup_var, subgroup_a_label, subgroup_b_label, outcome)。
+
+---
+
+これらのテーブルは `src/db/schema.py` (SQLite SILVER) 上には登録されていない。Mart 専用設計の理由:
+
+1. **post-pipeline computation**: ETL ではなく分析 phase で生成される派生統計
+2. **DuckDB 直書き**: SQLite ベースの SILVER と切り離し、analytical 並列効率を確保
+3. **report 読取のみ**: v2 reports は `gold_connect()` 経由で読取、書込は post_processing.* のみ
+
+将来 SQLModel への登録が必要になれば、`src/db/schema.py` に `feat_*` モデル追加 + Atlas migration を別カードで実施する。

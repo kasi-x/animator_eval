@@ -29,8 +29,6 @@ Audience: policy (primary), biz (secondary)
 
 from __future__ import annotations
 
-import math
-import sqlite3
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -253,7 +251,6 @@ class StructureInternationalReport(BaseReportGenerator):
         result: "InternationalCollabResult",
         coverage_note: str,
     ) -> ReportSection:
-        from src.analysis.network.international_collab import YearlyForeignRatio
 
         ratios = result.yearly_ratios
         if not ratios:

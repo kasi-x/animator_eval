@@ -6,9 +6,6 @@ import numpy as np
 import pytest
 
 from src.analysis.quality.credit_anomaly import (
-    PoissonOutlier,
-    RoleDivergence,
-    SourceDisagreement,
     detect_poisson_outliers,
     detect_role_divergence,
     detect_source_disagreement,

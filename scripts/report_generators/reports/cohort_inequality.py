@@ -17,7 +17,6 @@ import plotly.graph_objects as go
 import structlog
 
 from src.analysis.equity.cohort_inequality import (
-    CohortInequalityRow,
     compute_cohort_trajectory,
 )
 

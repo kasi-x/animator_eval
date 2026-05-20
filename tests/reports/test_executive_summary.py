@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 
 from scripts.report_generators.briefs.executive_summary import (
-    ExecutiveSummary,
     KeyFinding,
     build_executive_summary,
     filter_findings_passing_coverage,

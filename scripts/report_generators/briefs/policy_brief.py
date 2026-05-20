@@ -131,14 +131,18 @@ def generate_policy_brief() -> dict:
     )
 
     # ─── Executive Summary auto-inject (Session 2 後半) ──────────────
+    from scripts.report_generators.briefs._keyfindings_loader import load_keyfindings
     from scripts.report_generators.briefs.executive_summary import (
         build_executive_summary,
+        rank_findings_by_abs_value,
         render_executive_summary_html,
     )
+    _kf = load_keyfindings("policy")
+    _kf = rank_findings_by_abs_value(_kf, top_k=5) if _kf else []
     _exec_summary = build_executive_summary(
         brief_id="policy",
         audience="policymakers",
-        findings=[],  # pipeline 投入で KeyFinding 一覧化
+        findings=_kf,
     )
     brief.add_section(
         section_id="executive_summary",

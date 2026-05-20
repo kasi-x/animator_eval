@@ -91,8 +91,9 @@
 | studio_pipeline.py | StudioPipelineReport | スタジオ育成パイプライン構造 | **new** | — | TASK_CARDS/26_industry_structure/03; 若手θ成長・中堅継続率・集中度・bus factor |
 | career_visibility_warning.py | CareerVisibilityWarningReport | 翌年クレジット可視性喪失 早期警告 | **new** | — | TASK_CARDS/25_compensation_fairness/03; LightGBM+isotonic, temporal holdout AUC gate, subgroup fairness |
 | cohort_inequality.py | CohortInequalityReport | 世代別 構造的不平等の推移 | **new** | — | 高度化: 5 年 cohort 別 Gini/Theil-T/Atkinson 時系列、bootstrap CI、生存者バイアス caveat |
+| mentor_effect.py | MentorEffectReport | Mentor 効果 event-study + matched DiD | **new** | — | 高度化: pair pre/post Δθ + 非 mentor control bootstrap DiD、selection bias caveat |
 
-> 統合後 hr = **9 本** (cohort_inequality 追加)。
+> 統合後 hr = **10 本** (mentor_effect 追加)。
 
 ---
 
@@ -131,8 +132,9 @@
 | knowledge_network.py | KnowledgeNetworkReport | 知識伝達ネットワーク | keep | ネットワーク |
 | temporal_foresight.py | TemporalForesightReport | キャリア軌跡予測 | rewrite | predictive claim → holdout validation 未実装なら archived 候補 |
 | bridge_analysis.py | BridgeAnalysisReport | ネットワークブリッジ | merge | 概要を biz_trust_entry 吸収、詳細 keep |
+| credit_anomaly_audit.py | CreditAnomalyAuditReport | Credit anomaly audit | **new** | Session 2 後半: Poisson / KL / source-disagreement 3 detector 統合、review priority flag |
 
-> 統合後 technical_appendix = **15 本** (上限)。
+> 統合後 technical_appendix = **16 本** (上限超過、credit_anomaly_audit は監査運用枠で追加)。
 
 ---
 

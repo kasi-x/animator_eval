@@ -18,14 +18,12 @@ Audience: policy (primary), hr (secondary)
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import Any
 
 import plotly.graph_objects as go
 import structlog
 
-from ..ci_utils import format_ci
 from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
@@ -99,8 +97,6 @@ class O1GenderCeilingReport(BaseReportGenerator):
             PIPELINE_PAIRS,
             CoxResult,
             MannWhitneyResult,
-            EgoNetworkResult,
-            EgoNetworkSummary,
             compute_ego_network_gender_composition,
             load_gender_progression_records,
             cox_progression_hazard,
@@ -154,7 +150,7 @@ class O1GenderCeilingReport(BaseReportGenerator):
             sb.build_section(self._build_ego_net_section(sb, ego_results, ego_summary, coverage_note)),
         ]
 
-        interpretation_html = self._build_interpretation(cox_results, ego_summary)
+        self._build_interpretation(cox_results, ego_summary)
 
         insert_lineage(
             self.conn,

@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-05-20 (Session 2 終了時: レポート高度化フェーズ完了 — 8 新規 analysis modules + 2 新規 reports + DiD robustness + Cox PH 並設 + Findings/Interpretation lint + cross-reference + executive_summary + forbidden_vocab 拡張)
+作成日: 2026-04-22 / 最終更新: 2026-05-20 (Session 2 ラウンド 2 完了: 14 warning fix + cross_ref auto-inject + 2 新規 v2 report (mentor_effect / credit_anomaly_audit) + HTE section + 3 SPEC + brief 冒頭 executive_summary + post_processing.run_power_audit + 246 tests pass + labor-first 0 violations)
 
 未完了項目のみ。完了済みは `DONE.md`、設計原則は `CLAUDE.md`。
 
