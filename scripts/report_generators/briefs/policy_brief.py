@@ -565,6 +565,104 @@ Mann-Whitney results, and ego-network null percentile distributions with 95% CI.
         """,
     )
 
+    # ─── Session 2026-05-20 additions ──────────────────────────────────
+    # network_resilience: 構造的脆弱性 (新規分析、policy 経路)
+    brief.add_section(
+        section_id="structural_fragility",
+        title="Structural Network Fragility (構造的脆弱性 simulation)",
+        findings="""
+Collaboration graph (person × co-credit) で hub / bridge person を順次除去し、
+global metric (LCC / pair_connectivity / mean_authority) の劣化曲線を測定。
+random vs degree-targeted vs bridge_score-targeted の 3 strategy を比較し、
+relative_fragility = 1 - degree_auc / random_auc で hub 集中度を openly に開示する。
+
+**Method gate:**
+- node attribute bridge_score は src/analysis/network/bridges.py 由来
+- 各 metric の baseline-ratio curve で trapezoidal AUC
+- critical persons top-10 を pair_connectivity drop 順で抽出
+
+**Caveat block:**
+- collaboration graph 構築は entity resolution 信頼性に依存。19/01 / 35/01 完了後の
+  Resolved 層が入力前提。
+- per-anime cap (80 persons) で長期 series の O(n²) 爆発を回避。
+- bridge_score 属性が無い node は random / degree のみで評価。
+        """,
+        interpretation="""
+**Interpretation (Policy perspective — structural fragility):**
+
+I observe that the animation collaboration network is hub-concentrated when
+relative_fragility >> 0. Removal of a small number of bridge persons causes
+disproportionate drops in pair_connectivity. This is a structural observation
+about credit network topology, not an evaluation of individual worth.
+
+**Policy considerations:**
+- If relative_fragility is high (>0.3), the industry's capacity to sustain
+  cross-studio collaboration depends on a small set of bridge persons. Their
+  attrition is a systemic risk to collaboration continuity.
+- The top-10 critical persons are loci of structural connectivity. Investment
+  in transparent credit, succession, and knowledge transfer programs at these
+  positions reduces fragility.
+
+**Alternative interpretation:**
+High fragility could reflect data sparseness (few credits per person averaged
+across history) rather than true network concentration. Cohort-stratified
+re-runs are recommended before strong claims.
+
+See network_resilience.html for AUC curves, critical persons table, and
+strategy comparison.
+        """,
+    )
+
+    # equity_oaxaca: 機会格差の Oaxaca-Blinder 分解 (gender)
+    brief.add_section(
+        section_id="opportunity_decomposition",
+        title="Opportunity Decomposition (Oaxaca-Blinder, gender)",
+        findings="""
+Female / Male の同等 theta_i / tenure / role_diversity 条件下での credit 機会量
+差を **endowment** (構造的位置の差) と **structural** (同位置の処遇差) に分解。
+bootstrap CI 1000 回 + cluster=person。
+
+**Method gate:**
+- y = log(1 + total_credits), X = (theta_i, tenure_years, role_diversity proxy)
+- 基準 group = male、CATE_female = β_treated + β_(treated × female)
+- HC0 heteroskedasticity-consistent SE
+
+**Caveat block:**
+- gender null 率は現状 80.9% (§15 enrichment 完了後に本格動作)
+- subgroup n < 100 では推定不安定、Findings に明示
+- 二値 gender 単純化 (non-binary は別 cut で扱う)
+- credit count は機会量 proxy、role weight / anime scale は捨象
+        """,
+        interpretation="""
+**Interpretation (Policy perspective — opportunity gap):**
+
+I observe that when structural variables (theta_i, tenure) are controlled,
+the residual structural gap (CATE) captures differential treatment unrelated
+to credit-attributable position. The decomposition isolates two channels:
+endowment effects (position gap) vs structural effects (same-position
+differential treatment).
+
+The structural component, if its CI excludes zero, documents that persons of
+otherwise comparable network position experience differential credit access.
+This is a structural observation that frames policy on labor pipeline equity,
+not an individual-merit evaluation.
+
+**Policy considerations:**
+- structural gap CI excludes zero → labor pipeline audit warranted
+- endowment gap large → access to high-theta positions is the binding constraint
+- gender enrichment (§15) precondition: null < 30% before publishing point estimates
+
+**Alternative interpretation:**
+Decomposition is descriptive at conditional means. It does not identify the
+causal mechanism behind structural gap. Differential measurement (gender data
+missing-at-random violation) would inflate the residual. Sensitivity analysis
+via Cotton/Neumark referent and E-value bounds is recommended.
+
+See equity_oaxaca.html for full bootstrap CI, per-feature endowment/structural
+contributions, and subgroup expansions.
+        """,
+    )
+
     # 4. Validate and export
     is_valid, errors = brief.validate()
 

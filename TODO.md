@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-05-20 (本セッションで消化: 35/01 final + 25/01 + 25/04 + 32 publication docs + 15/05 残務 + 15/06 残務 + 36 新カード起票 + Mart schema 透過化 + 全レポート vocab clean)
+作成日: 2026-04-22 / 最終更新: 2026-05-20 (Session 2 終了時: レポート高度化フェーズ完了 — 8 新規 analysis modules + 2 新規 reports + DiD robustness + Cox PH 並設 + Findings/Interpretation lint + cross-reference + executive_summary + forbidden_vocab 拡張)
 
 未完了項目のみ。完了済みは `DONE.md`、設計原則は `CLAUDE.md`。
 

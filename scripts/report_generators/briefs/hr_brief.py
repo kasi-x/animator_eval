@@ -449,6 +449,50 @@ and studio-level blockage heatmap with 95% CI.
         """,
     )
 
+    # ─── Session 2026-05-20 additions ──────────────────────────────────
+    # cohort_inequality: 世代別 構造的不平等の推移
+    brief.add_section(
+        section_id="cohort_structural_inequality",
+        title="Cohort Structural Inequality Trajectory",
+        findings="""
+5-year cohort 別に credit 機会量 (log(1+total_credits)) の不平等指標 (Gini /
+Theil-T / Atkinson(ε=0.5)) を計算し、時系列推移を描画する。
+
+**Method gate:**
+- min_cohort_n = 30 未満は推定不安定として除外
+- bootstrap CI 1000 回 (cohort 内置換)
+- 3 指標併設で robust 判定 (同方向の動き = 信頼性高)
+- 最古 vs 最新 cohort の Gini 差分 + CI 重複判定で有意性
+
+**Caveat block:**
+- **生存者バイアス**: 短寿命 person は credit 少 → Gini を下方押し下げ
+- **累積途上**: 近年 cohort は活動年数が浅く total_credits 累積途上
+- credit 1 件 = 同重み (role / scale 捨象)
+- gender / studio との交差分析は別 cut で別途
+        """,
+        interpretation="""
+**Interpretation (Worker / HR perspective — cohort inequality):**
+
+I observe cohort 内 credit 機会の集中度を 3 指標で測定。同方向の動きが揃う場合に
+robust な構造変化の signal とする。指標は credit 数ベースの **構造的格差** を測り、
+個人の主観評価とは無関係。
+
+**HR context:**
+- Gini 上昇 = 上位 person への credit 集中強化。中堅育成施策の検討余地。
+- Gini 横ばい or 低下 = credit 分散の維持 / 改善。
+- 最新 cohort の Gini は **累積途上バイアス** で必ず下方寄り。trend 解釈は
+  cohort 経過年数を control してから。
+
+**Alternative interpretation:**
+不平等指標は credit-count 単位の単純化。重み付き credit (role × episode)、
+production_scale 正規化、within/between cohort decomposition で結果が変動。
+Tier-2 拡張 (重み付き spec) との一貫性 check を将来推奨。
+
+See cohort_inequality.html for full table, time-series plot, bootstrap CI
+overlap analysis between cohorts.
+        """,
+    )
+
     # 4. Validate and export
     is_valid, errors = brief.validate()
 

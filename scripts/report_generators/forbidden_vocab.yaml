@@ -234,3 +234,35 @@ interpretation_markers:
     - we interpret
     - we speculate
     - we conclude
+
+# ----------------------------------------------------------------------
+# Category 5: subjective_evaluation (added 2026-05-20)
+# Subjective evaluation framings — "潜在力", "成長余地", "活躍",
+# "見込み" 等。これらは構造的指標を主観評価と読み違える誤読を誘発する。
+# 構造的事実記述には不要 (numeric / time / role 等で代替可能)。
+# ----------------------------------------------------------------------
+subjective_evaluation:
+  severity: error
+  reason: >
+    Subjective-evaluation framings (potential / growth ceiling / promise)
+    map a structural observation onto a subjective worth claim. Use
+    structural descriptors (e.g. "credit 数 N", "active_years X 年",
+    "co-credit edges Y") instead.
+  ja:
+    - 潜在力
+    - 成長余地
+    - 見込み
+    - 期待される人材
+    - 期待のホープ
+    - 有望
+    - 注目株
+    - 大物
+    - 立役者
+    - 牽引役
+    - 第一人者
+  en:
+    - rising star
+    - promising talent
+    - hot prospect
+    - potential candidate
+    - growth potential

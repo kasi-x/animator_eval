@@ -97,6 +97,11 @@ class CareerVisibilityWarningReport(BaseReportGenerator):
             sb.build_section(_build_feature_importance(sb, data)),
         ]
 
+        # Cox PH 並設 (data に "cox_results" が含まれる時のみ)
+        cox_section = _build_cox_section(sb, data)
+        if cox_section is not None:
+            sections.append(sb.build_section(cox_section))
+
         interpretation_html = _build_interpretation(data)
         body = "\n".join(sections)
 
@@ -357,6 +362,74 @@ def _build_feature_importance(sb: SectionBuilder, data: dict) -> ReportSection:
             "因果的解釈は別途 DML / RDD 等の識別戦略が必要。"
         ),
         section_id="visibility_features",
+    )
+
+
+def _build_cox_section(sb: SectionBuilder, data: dict) -> "ReportSection | None":
+    """Cox PH 並設 section (data.cox_results が存在する時のみレンダー)。
+
+    cox_results schema:
+        feature_names: list[str]
+        hazard_ratios: list[float]
+        hr_ci_low / hr_ci_high: list[float]
+        p_values: list[float]
+        concordance_index: float
+        n_subjects: int
+        n_events: int
+        ph_violators: list[str]  # Schoenfeld test 違反 feature 列
+        ph_global_p: float
+        train_concordance / test_concordance: float (temporal holdout)
+
+    Returns None if data unavailable → セクション挿入見送り。
+    """
+    cox = data.get("cox_results") if isinstance(data, dict) else None
+    if not cox:
+        return None
+
+    feature_names = cox.get("feature_names", [])
+    hrs = cox.get("hazard_ratios", [])
+    hr_lo = cox.get("hr_ci_low", [])
+    hr_hi = cox.get("hr_ci_high", [])
+    pvals = cox.get("p_values", [])
+    c_train = _safe_float(cox.get("train_concordance"))
+    c_test = _safe_float(cox.get("test_concordance"))
+    ph_p = _safe_float(cox.get("ph_global_p"))
+    ph_violators = cox.get("ph_violators", []) or []
+
+    rows = "".join(
+        f"<tr><td>{name}</td>"
+        f"<td>{_fmt(hr)}</td>"
+        f"<td>[{_fmt(lo)}, {_fmt(hi)}]</td>"
+        f"<td>{_fmt(p, 4)}</td></tr>"
+        for name, hr, lo, hi, p in zip(feature_names, hrs, hr_lo, hr_hi, pvals)
+    )
+
+    findings = (
+        "<p>Cox PH (lifelines) による hazard 推定。LightGBM の予測精度と並設し "
+        "interpretation 容易性を強化する。</p>"
+        f"<p>concordance (train): {_fmt(c_train)}, "
+        f"concordance (test, debut_year holdout): {_fmt(c_test)}。"
+        f"PH global p (Schoenfeld): {_fmt(ph_p, 4)}。</p>"
+        + (
+            f"<p>PH 仮定違反 feature: {', '.join(ph_violators)}。 "
+            "時間相互作用項を追加した拡張 spec で再推定推奨。</p>"
+            if ph_violators else
+            "<p>PH 仮定: 全 feature で違反なし。</p>"
+        )
+        + "<table><thead><tr><th>feature</th><th>HR</th><th>95% CI</th>"
+        "<th>p</th></tr></thead><tbody>" + rows + "</tbody></table>"
+    )
+
+    return ReportSection(
+        title="Cox PH (並設、HR + Schoenfeld test)",
+        section_id="visibility_cox",
+        findings_html=findings,
+        method_note=(
+            "lifelines.CoxPHFitter で fit。HR は exp(β)。95% CI = exp(β ± 1.96 × SE)。"
+            "Schoenfeld residual test で PH 仮定検証 (p < 0.05 で違反)。"
+            "temporal holdout: debut_year 閾値で train/test 分割、"
+            "concordance を両半分で計算し drift を観察。"
+        ),
     )
 
 

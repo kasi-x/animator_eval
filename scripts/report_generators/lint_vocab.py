@@ -60,6 +60,7 @@ ENFORCED_CATEGORIES = (
     "evaluative_adjectives",
     "ranking_framing",
     "hiring_framing",
+    "subjective_evaluation",
 )
 
 # ---------------------------------------------------------------------------

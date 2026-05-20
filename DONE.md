@@ -565,3 +565,59 @@ commits: 6b2fa6e → 404f161 → b1e9faa → 65a9303 → bf91532 → 0ad2fb2 →
 - 46 tests pass (was 30) / 下流 161+35 pass / calibration 0.9500 (target 0.950, tol ±0.020)
 - Q-Q deviation 0.039 (Stop-if 0.5 下) / permutation 0.55s (Stop-if 24h 下)
 - `docs/method_notes/opportunity_residual.md` 仮定 + 代替 spec 文書化
+
+### Session 2026-05-20: レポート高度化セッション
+
+10 commit、200+ tests pass、レポート 38 → 40、analysis modules 8 新規 + 1 既存補強。
+
+#### 35/01 nationality_backfill 完了 (commit `df2debb`)
+- `infer_country_from_hometown()` 新規 (英文都市/国名 token + word-boundary)
+- `integrate_duckdb.py` の persons.hometown→nationality backfill step (DuckDB UDF)
+- `nationality_resolver` の resolved/conformed schema 自動解決
+- resolved.persons 非空率 **3.48% → 12.26%** (76,279 件)、'[]' ゼロ達成
+- name_utils テスト +15
+
+#### Mart schema 透過化 (commit `3894bc7`)
+- `gold_connect` で resolved.duckdb 自動 ATTACH + TEMP VIEW
+- analysis 層が `FROM credits` 等 bare 名で書ける状態を回復
+- international_collab / nationality_resolver / o8_soft_power の schema fallback 整理
+- 136 tests pass
+
+#### 25/04 Oaxaca-Blinder 分解実装 (commit `ce7d0a6`)
+- `src/analysis/equity/oaxaca_decomp.py` 新規 (decompose / bootstrap CI 1000)
+- `scripts/report_generators/reports/equity_oaxaca.py` v2 report
+- 14 tests pass、§15 gender 70% 充足後に本格動作
+- gender 不足下では skeleton + 警告 mode
+
+#### 8 新規分析 modules (commit `7fb53d4`)
+- `network/resilience.py` (32 tests): hub/bridge 除去 simulation、fragility_ratio、critical persons
+- `equity/cohort_inequality.py` (23 tests): Gini/Theil-T/Atkinson 時系列
+- `career/cox_visibility.py` (13 tests): Cox PH + Schoenfeld test + temporal holdout
+- `causal/heterogeneous_effects.py` (15 tests): DiD → CATE 分解 + T-learner
+- `quality/credit_anomaly.py` (14 tests): Poisson outlier + KL + source disagreement
+- `career/mentor_effect.py` (11 tests): event-study + matched DiD
+- `quality/power_analysis.py` (21 tests): t-test/regression/correlation power + MDE
+- `briefs/executive_summary.py` (12 tests): KeyFinding template
+
+#### 2 新規 v2 reports (commit `8b75fe0`)
+- `NetworkResilienceReport` (policy)
+- `CohortInequalityReport` (hr)
+
+#### レポート品質強化 (本セッション後半)
+- DiD robustness: `did_robustness.py` (placebo / E-value / joint leads、14 tests)
+- visibility_warning に Cox section 並設可能化 (`_build_cox_section()`)
+- forbidden_vocab に `subjective_evaluation` category 追加 (潜在力 / 成長余地 等)
+- `lint_findings_separation.py` 新規: AST 解析で Findings / Interpretation 分離 audit
+- `cross_reference.py` 新規 + 既存 reports の link graph 構築 (8 tests)
+- `tests/integration/test_new_modules_integration.py` 10 integration tests
+
+#### 文書整備
+- `docs/method_notes/` に 7 新規 note (resilience / cohort / cox / HTE / mentor / anomaly / power)
+- policy brief: structural_fragility + opportunity_decomposition 2 section 追加 (5→9)
+- hr brief: cohort_structural_inequality 1 section 追加 (6→7)
+- `REPORT_INVENTORY.md` 同期 (policy 7 / hr 9)
+
+#### 36 AniList orphan backfill カード起票
+- `TASK_CARDS/36_anilist_orphan_backfill/01_orphan_backfill.md` (実装着手は scrape 律速で保留可)
+
+#### labor-first audit 0 violations 維持 (54 files)
