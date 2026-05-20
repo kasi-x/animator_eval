@@ -261,6 +261,25 @@ class BaseReportGenerator(ABC):
             xref_html = ""
         body_with_xref = body + xref_html if xref_html else body
 
+        # Reproducibility footer (Session 2 ラウンド 4: 誰でも再現可能)
+        try:
+            import inspect
+
+            from ..reproducibility_footer import (
+                build_metadata,
+                register,
+                render_footer_html,
+            )
+
+            mod = inspect.getmodule(self.__class__)
+            spec_obj = getattr(mod, "SPEC", None) if mod is not None else None
+            repro_meta = build_metadata(self.name, spec_obj=spec_obj)
+            register(repro_meta)
+            footer_html = render_footer_html(repro_meta)
+            body_with_xref = body_with_xref + footer_html
+        except Exception as exc:
+            log.debug("repro_footer_failed", report=self.name, error=str(exc))
+
         html = wrap_html_v2(
             title=self.title,
             subtitle=self.subtitle,

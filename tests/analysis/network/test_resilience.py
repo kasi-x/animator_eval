@@ -30,7 +30,8 @@ class TestMetrics:
         assert largest_connected_component_size(nx.Graph()) == 0
 
     def test_lcc_singleton(self):
-        g = nx.Graph(); g.add_node(1)
+        g = nx.Graph()
+        g.add_node(1)
         assert largest_connected_component_size(g) == 1
 
     def test_lcc_complete(self):

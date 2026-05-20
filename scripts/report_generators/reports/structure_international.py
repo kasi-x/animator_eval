@@ -30,6 +30,10 @@ Audience: policy (primary), biz (secondary)
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.analysis.network.international_collab import InternationalCollabResult
 
 import plotly.graph_objects as go
 import structlog
@@ -114,7 +118,7 @@ class StructureInternationalReport(BaseReportGenerator):
 
     def generate(self) -> Path | None:
         from src.analysis.network.international_collab import (
-            InternationalCollabResult,
+            InternationalCollabResult,  # noqa: F401 — used in type hints
             analyze_international_collab,
         )
 

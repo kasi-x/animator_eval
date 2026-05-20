@@ -27,6 +27,10 @@ Audience: policy (primary)。
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.analysis.network.committee_centrality import CommitteeCentralityResult
 
 import plotly.graph_objects as go
 import structlog
@@ -69,7 +73,7 @@ class StructureCommitteeReport(BaseReportGenerator):
 
     def generate(self) -> Path | None:
         from src.analysis.network.committee_centrality import (
-            CommitteeCentralityResult,
+            CommitteeCentralityResult,  # noqa: F401 — used in type hints below
             analyze_committee_centrality,
         )
 

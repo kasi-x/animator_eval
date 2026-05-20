@@ -597,11 +597,16 @@ class CausalStudioTransferReport(BaseReportGenerator):
 # ---------------------------------------------------------------------------
 # v3 SPEC
 # ---------------------------------------------------------------------------
-from .._spec import make_default_spec  # noqa: E402
+from .._spec import SensitivityAxis, make_default_spec  # noqa: E402
 
 SPEC = make_default_spec(
     name="causal_studio_transfer",
-    audience="appendix",
+    audience="technical_appendix",
+    sensitivity_grid=[
+        SensitivityAxis(name="placebo_year_offsets", values=[-5, -4, -3, 3, 4, 5]),
+        SensitivityAxis(name="e_value_sensitivity", values=["VanderWeele 2017"]),
+        SensitivityAxis(name="joint_leads_alpha", values=[0.05]),
+    ],
     claim=(
         "person × year panel における studio transfer を処置とする DiD で、"
         "theta_i / opportunity_residual / credit_count への ATE が 95% CI で "
@@ -628,4 +633,9 @@ SPEC = make_default_spec(
         "Limited mobility bias (Andrews 2008): 単スタジオ person は推定除外",
         "treatment timing 異質性 (rolling event) は static DiD では bias 可能性",
     ],
+    alternative_interpretations=(
+        "正の ATE は移籍効果ではなく self-selection (移籍前から theta 上昇軌道) を反映。parallel trends test + placebo + E-value で頑健性確認要。",
+        "studio FE 変化 (移籍先 studio の構造的特性) が theta 変化の主因で、移籍行動自体の効果は小さい可能性。Andrews-2way decomposition 推奨。",
+        "treatment timing 異質性 (rolling event) で static DiD は negative weight 含み biased。Callaway-Sant'Anna (2021) で再推定すれば結果が変わる可能性。",
+    ),
 )

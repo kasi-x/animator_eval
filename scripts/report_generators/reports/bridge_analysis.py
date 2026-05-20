@@ -606,7 +606,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
     def _make_career_track_pie(self, rows: list, total_persons: int) -> go.Figure:
         labels = [r["career_track"] for r in rows]
         values = [r["n_persons"] for r in rows]
-        colors = [_TRACK_COLORS.get(l, "#a0a0c0") for l in labels]
+        colors = [_TRACK_COLORS.get(label, "#a0a0c0") for label in labels]
 
         fig = go.Figure(go.Pie(
             labels=labels,

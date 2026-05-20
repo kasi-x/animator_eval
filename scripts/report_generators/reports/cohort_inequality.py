@@ -206,4 +206,9 @@ SPEC = make_default_spec(
         "累積途上: 近年 cohort は活動年数浅く total_credits 累積途上",
         "cohort × gender / studio の交差は別 cut で別途",
     ],
+    alternative_interpretations=(
+        "Gini 拡大は構造的格差ではなく cohort の経過時間差 (古い cohort ほど累積機会が多い) を反映している可能性。inflation-adjusted spec で再計算要。",
+        "credit count は機会量 proxy として粗く、weighted credit (role × episode) で再計測すると不平等が逆方向に動く可能性。",
+        "短寿命 person 除外バイアスを考慮した Heckman correction で structural inequality が変わる可能性。",
+    ),
 )

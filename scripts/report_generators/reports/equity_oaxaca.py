@@ -356,4 +356,9 @@ SPEC = make_default_spec(
         "subgroup n < 100 で skeleton + 警告 mode",
         "missing-at-random 仮定違反時、structural 成分が膨張する可能性",
     ],
+    alternative_interpretations=(
+        "structural 成分は同位置の処遇差ではなく未観測 confounder (output mix / 専門性) の差を反映している可能性。E-value 等 sensitivity で頑健性確認要。",
+        "Blinder (1973) 基準型 (referent=male) ではなく Cotton / Neumark (1988) で基準を変えると endowment / structural の配分が異なる可能性。",
+        "gender NULL がランダムでない (女性偏向 missing 等) なら structural を過大評価する。§15 enrichment で missing 率縮小が必要。",
+    ),
 )

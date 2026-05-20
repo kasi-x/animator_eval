@@ -145,6 +145,8 @@ class ReportSpec:
     sensitivity_grid: list[SensitivityAxis]
     interpretation_guard: InterpretationGuard
     data_lineage: DataLineage
+    # Session 2 ラウンド 4: 代替解釈 / 反証可能性を構造化
+    alternative_interpretations: tuple[str, ...] = ()
 
     def validate(self) -> list[str]:
         out: list[str] = []
@@ -152,6 +154,11 @@ class ReportSpec:
             out.append("claim missing")
         if not self.identifying_assumption:
             out.append("identifying_assumption missing")
+        if len(self.identifying_assumption) < 30:
+            out.append(
+                f"identifying_assumption too short ({len(self.identifying_assumption)} < 30 chars) — "
+                "expand identification strategy to be reviewer-rigorous"
+            )
         if not self.null_model:
             out.append(
                 "null_model required — declare e.g. ['N3'] or ['N7'] "
@@ -364,6 +371,7 @@ def make_default_spec(
     extra_limitations: list[str] | None = None,
     snapshot_date: str = "2026-04-30",
     pipeline_version: str = "v55",
+    alternative_interpretations: tuple[str, ...] = (),
 ) -> ReportSpec:
     """Build a minimally-valid ReportSpec with audience-aware defaults.
 
@@ -425,4 +433,5 @@ def make_default_spec(
             snapshot_date=snapshot_date,
             pipeline_version=pipeline_version,
         ),
+        alternative_interpretations=alternative_interpretations,
     )

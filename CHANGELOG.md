@@ -70,6 +70,83 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v3.1] - 2026-05-20
+
+レポート高度化 4 ラウンド: 35/01 nationality_backfill 完了 → 9 新規 analysis module
+→ レポート品質 scorecard (mean 79.5) → 完備性 audit 全パス。
+
+### Added
+
+- **10 新規 analysis module** (260+ tests):
+  - `src/analysis/network/resilience.py`: hub/bridge 除去 simulation、fragility_ratio
+  - `src/analysis/equity/oaxaca_decomp.py`: Oaxaca-Blinder + bootstrap CI
+  - `src/analysis/equity/cohort_inequality.py`: Gini/Theil/Atkinson 時系列
+  - `src/analysis/career/cox_visibility.py`: Cox PH + Schoenfeld + temporal holdout
+  - `src/analysis/career/mentor_effect.py`: event-study + matched DiD
+  - `src/analysis/causal/heterogeneous_effects.py`: subgroup CATE + T-learner
+  - `src/analysis/causal/did_robustness.py`: placebo + E-value + joint leads
+  - `src/analysis/quality/credit_anomaly.py`: Poisson / KL / source-disagreement
+  - `src/analysis/quality/power_analysis.py`: t/regression/correlation power + MDE
+  - `src/analysis/quality/multiple_testing.py`: Bonferroni / Holm / BH
+
+- **4 新規 v2 reports** (38 → 42):
+  EquityOaxaca / NetworkResilience / CohortInequality / MentorEffect / CreditAnomalyAudit
+
+- **品質ライブラリ + 監査スクリプト**:
+  `viz_quality.py` (WCAG AA + Okabe-Ito CVD-safe palette + forest/violin/heatmap)、
+  `reproducibility_footer.py` (git_sha + spec_hash + timestamp footer auto-inject)、
+  `cross_reference.py` (56/56 reports linked)、
+  `briefs/_keyfindings_loader.py`、
+  `quality_scorecard.py` (mean 79.5/100)、
+  `ci_check_spec_coverage.py` (55/55 SPEC)、
+  `ci_check_method_gate.py` (55/55 method gate pass)、
+  `lint_findings_separation.py`、`lineage_register.py`
+
+- **9 新規 Mart テーブル DDL** (`_DDL` + `_MART_PK_MAP`):
+  feat_did_hte / feat_mentor_* (3) / feat_credit_anomaly_flags / feat_did_robustness /
+  feat_network_resilience / feat_cohort_inequality / feat_oaxaca_decomposition
+
+- **brief 強化**:
+  policy 5 → 10 / hr 6 → 8 / business 6 → 7 sections。全 brief 冒頭に
+  executive_summary auto-inject。
+
+- **7 method_notes**:
+  network_resilience / cohort_inequality / cox_visibility / heterogeneous_effects /
+  mentor_effect / credit_anomaly / power_analysis
+
+### Changed
+
+- `gold_connect()`: resolved.duckdb 自動 ATTACH + TEMP VIEW で `FROM credits` 等
+  bare-name SQL を透過化
+- `_base.write_report()`: cross-reference + reproducibility footer auto-inject
+- `forbidden_vocab.yaml`: `subjective_evaluation` category 追加 (11 語)
+- `ReportSpec`: `alternative_interpretations` field 追加、
+  identifying_assumption ≥ 30 char rule
+
+### Fixed
+
+- 35/01 nationality 流入路: resolved.persons 非空率 **3.48% → 12.26%** (76K 件)
+- 14 Interpretation 一人称マーカー欠落 → 0
+- credit_anomaly_audit クエリ 106s 完走可能化
+- 4 vocab violations → 0
+
+### Verified
+
+- **263 新規 tests pass**
+- quality scorecard mean **79.5 / 100**
+- labor-first vocab: **0 violations / 56 files**
+- Findings/Interpretation lint: **0 warnings**
+- SPEC coverage: **55/55**
+- Method gate audit: **55/55 pass**
+- Cross-reference: **56/56 reports linked**
+
+### Commits (Session 2)
+
+`df2debb` → `3894bc7` → `ce7d0a6` → `04f4964` → `7fb53d4` → `8b75fe0` →
+`04cb2a4` → `1f031c6` → `a412662` → `6af6c4b` → `e437eda`
+
+---
+
 ## [Unreleased]
 
 ### Planned
@@ -79,3 +156,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - インライン手動 KPI/caption の更なる拡張 (~30 reports auto-extract のまま)
 - Atlas migration apply (DB v63 物理 schema 反映)
 - CI workflow に GeoJSON fetch step 追加 (`data/` git ignored の補完)
+- 9 feat テーブルへの post_processing driver 実装 (現状 DDL のみ、計算経路未実装)
+- AniList orphan backfill 実走 (#36 カード)、§15 gender enrichment 70% 達成

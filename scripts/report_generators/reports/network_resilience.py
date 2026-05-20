@@ -267,4 +267,9 @@ SPEC = make_default_spec(
         "eigenvector_centrality 収束失敗時 graceful 0 fallback",
         "critical person flag は構造的観察、個人評価ではない",
     ],
+    alternative_interpretations=(
+        "high fragility は network 構造ではなく sampling artifact (top-N 5,000 person 抽出) の可能性。全 person で再走、結果安定性を確認すべき。",
+        "critical persons の存在は co-credit データの偏向 (大手 studio クレジット過多) を反映している可能性があり、業界全体の脆弱性とは別問題と考えられる。",
+        "removal-curve AUC は static graph 仮定。実際は person 流動性が高く、time-varying graph で再計算すると robust になる可能性。",
+    ),
 )

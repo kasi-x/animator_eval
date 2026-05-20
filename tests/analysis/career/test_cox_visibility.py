@@ -8,7 +8,7 @@ import pytest
 # lifelines is required for these tests
 lifelines = pytest.importorskip("lifelines")
 
-from src.analysis.career.cox_visibility import (
+from src.analysis.career.cox_visibility import (  # noqa: E402 — import after importorskip
     CoxFitResult,
     evaluate_temporal_holdout,
     fit_cox_ph,

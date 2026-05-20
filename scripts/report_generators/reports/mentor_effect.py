@@ -155,11 +155,16 @@ class MentorEffectReport(BaseReportGenerator):
 # ---------------------------------------------------------------------------
 # v3 SPEC
 # ---------------------------------------------------------------------------
-from .._spec import make_default_spec  # noqa: E402
+from .._spec import SensitivityAxis, make_default_spec  # noqa: E402
 
 SPEC = make_default_spec(
     name="mentor_effect",
     audience="hr",
+    sensitivity_grid=[
+        SensitivityAxis(name="pre_window", values=["(-3,-1)", "(-5,-1)"]),
+        SensitivityAxis(name="post_window", values=["(1,5)", "(1,10)"]),
+        SensitivityAxis(name="control_matching", values=["cohort", "cohort+role"]),
+    ],
     claim=(
         "mentor との初協業 event-year を 0 とする pre/post 比較 (Δθ_mentee) と "
         "非 mentor control 群との matched DiD で、mentor 協業経験の構造的位置への "
@@ -181,4 +186,9 @@ SPEC = make_default_spec(
         "theta_i panel が年次で揃ってない年は window 内観測数不均衡",
         "mentor relationship 推定そのものに精度限界",
     ],
+    alternative_interpretations=(
+        "正の Δθ は mentor 効果ではなく maturation effect (mentee 自身の年齢経験成長) を反映している可能性。matched control の事前 trajectory 一致確認が必要。",
+        "infer_mentorships() の mentor 推定が選抜バイアス (協業数多 = 構造的 hub) を導入し、観測 effect が hub への被選抜効果を測ってる可能性。",
+        "post window theta 上昇は anime production scale 増大 (作品大型化) の trend を反映、mentor relationship とは独立変動の可能性。time FE 拡張で確認要。",
+    ),
 )
